@@ -242,3 +242,58 @@ def test_list_amount_range_and_pagination():
 def test_get_not_found():
     with pytest.raises(NotFoundError):
         tx.get("no-such-id")
+
+# ---------- R5 作废·带标签（void 子表外键回归） ----------
+
+def test_void_tagged_transaction_succeeds_and_tags_traceable():
+    """带标签交易可作废（DuckDB 父行 UPDATE 对尚存子行 FK 敏感的回归）；
+    作废后标签原样保留——R5 作废可追溯语义。"""
+    out = _create(tags=["餐饮补贴", "通勤"])
+    assert len(out.tags) == 2
+    voided = tx.void(out.id)
+    assert voided.status == "voided"
+    assert sorted(t.name for t in voided.tags) == ["通勤", "餐饮补贴"]  # 标签零丢失
+
+
+def test_void_tagged_excluded_from_stats_and_default_list():
+    """作废带标签交易后：默认列表/收支统计正确排除、余额对账正确排除。"""
+    from ledger.services.stats import overview
+    a = _account("现金钱包B", "cash", "100.00")
+    t = _create(amount="30.00", account_id=a.id, tags=["餐饮补贴"],
+                occurred_at="2026-06-05T12:00:00")
+    tx.void(t.id)
+    assert tx.list_transactions().total == 0                       # 默认排除
+    assert tx.list_transactions(include_voided=True).total == 1    # 可查兜底
+    got = tx.get(t.id)
+    assert got.status == "voided" and [x.name for x in got.tags] == ["餐饮补贴"]
+    ov = overview("2026-06")
+    assert str(ov.expense) == "0.00"                               # 统计排除
+    bal = {x.name: x for x in accounts.list_accounts()}["现金钱包B"]
+    assert str(bal.balance) == "100.00"                            # 余额对账排除
+
+
+def test_void_tagged_transfer_and_double_void_conflict():
+    """带标签转账作废同样可用（转账无分类不挂标签限制，tags 合法）；
+    重复作废 409 语义不变。"""
+    a, b = _account("卡C", "debit"), _account("卡D", "credit")
+    t = tx.create(TransactionCreate(type="transfer", amount="9.00",
+                                    category_id=None, account_id=a.id,
+                                    counter_account_id=b.id, tags=["还款"]))
+    out = tx.void(t.id)
+    assert out.status == "voided" and [x.name for x in out.tags] == ["还款"]
+    with pytest.raises(ConflictError):
+        tx.void(t.id)
+
+
+def test_void_tagged_join_rows_restored_without_duplication():
+    """回写不产生重复联接（PK 约束自证）：作废后联接行数与标签集不变。"""
+    out = _create(tags=["旅行"])
+    tx.void(out.id)
+    from ledger.db import connect
+    with connect() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM transaction_tags WHERE transaction_id = ?",
+            [out.id]).fetchone()[0]
+    assert n == 1
+    got = tx.get(out.id)
+    assert [t.name for t in got.tags] == ["旅行"]

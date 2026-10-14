@@ -215,7 +215,14 @@ def update(txid: str, params: TransactionUpdate) -> TransactionOut:
 
 
 def void(txid: str) -> TransactionOut:
-    """作废（R5）：status 翻转，不物理删除；重复作废报 409。"""
+    """作废（R5）：status 翻转，不物理删除；重复作废报 409。
+
+    DuckDB 父表 UPDATE 的 FK 检查对尚存子行敏感（同 update() 先例：子表清理
+    必须先于父表 UPDATE），故先清标签联接、翻转状态后原样回写同批标签——
+    作废流水的标签可追溯性保持（R5 兜底语义）。逐语句自动提交形态与 update()
+    先例一致：显式事务内先删后改仍触发 FK 违规（父行 FK 检查不读同事务内
+    未提交的删除），故不另起显式事务。
+    """
     with connect() as conn:
         row = conn.execute(
             "SELECT status FROM transactions WHERE id = ?", [txid]).fetchone()
@@ -223,15 +230,24 @@ def void(txid: str) -> TransactionOut:
             raise NotFoundError("transaction_not_found", f"流水不存在：{txid}")
         if row[0] == "voided":
             raise ConflictError("transaction_already_voided", "该流水已作废")
+        saved = [r[0] for r in conn.execute(
+            "SELECT tag_id FROM transaction_tags WHERE transaction_id = ?"
+            " ORDER BY tag_id", [txid]).fetchall()]
         conn.execute(
-            "UPDATE transactions SET status = 'voided', updated_at = current_timestamp"
-            " WHERE id = ?", [txid],
+            "DELETE FROM transaction_tags WHERE transaction_id = ?", [txid])
+        conn.execute(
+            "UPDATE transactions SET status = 'voided',"
+            " updated_at = current_timestamp WHERE id = ?", [txid],
         )
+        for tid in saved:
+            conn.execute(
+                "INSERT INTO transaction_tags (transaction_id, tag_id)"
+                " VALUES (?, ?)", [txid, tid],
+            )
         row = conn.execute(
             f"SELECT {_TXN_COLS} FROM transactions WHERE id = ?", [txid]
         ).fetchone()
         return _to_out(conn, row)
-
 
 def list_transactions(*, start=None, end=None, txn_type: Optional[str] = None,
                       category_id: Optional[str] = None, account_id: Optional[str] = None,
