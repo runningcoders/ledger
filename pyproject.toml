@@ -3,9 +3,28 @@ name = "ledger"
 version = "0.1.0"
 description = "DuckDB MCP 个人流水账服务（MCP + FastAPI 双入口 · 单业务层 · 单数据文件）"
 requires-python = ">=3.10"
-# 依赖由执行单①落码时启用（架构设计方案 v1.0 §6 选型，勿在本骨架阶段提前写入）：
-#   mcp（官方 SDK，FastMCP 工具面）/ fastapi / uvicorn（UI 后端）/ duckdb / pydantic
+dependencies = [
+    # MCP 官方 SDK（FastMCP 工具面；架构设计方案 v1.0 §6：不引社区 FastMCP 2.x 超集）。
+    # 钉 <2：官方 SDK 2.x 将 FastMCP 更名 MCPServer（API 破坏性变更），按方案口径守 FastMCP 面。
+    "mcp>=1.2.0,<2.0.0",
+    # UI 后端
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    # 数据层（单文件 + WAL）
+    "duckdb>=1.0.0",
+    # 契约层（pydantic 单一事实源，FastAPI OpenAPI 即契约产出机制）
+    "pydantic>=2.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -49,6 +49,42 @@ ledger/                                # 仓库根（= uv 项目根，pyproject.
 
 ---
 
+## 生成式契约（前后端类型同源）
+
+**单一事实源**：`ledger/models.py`（pydantic）——MCP 工具参数、REST 请求体、响应契约全部从这里派生；前端 TS 类型不手写，经生成链路产出：
+
+```
+ledger/models.py ──► ledger/api.py（FastAPI 路由标注请求/响应模型）
+                        │
+                        ▼
+            FastAPI /openapi.json（契约 schema，自动产出）
+                        │
+                        ▼ openapi-typescript（生成物，禁手改）
+        frontend/src/api/types.ts   ◄── 前端唯一类型入口
+```
+
+- **MCP 面**：工具 schema 由 FastMCP 从 `mcp_server.py` 函数签名派生；工具体内一律构造 `models.py` 模型复用同一套校验（R1-R7 唯一口径）——两个协议皮契约同源，口径永不漂移。
+- **后端消费**：改契约 = 改 `models.py`（或 `api.py` 路由标注），其余端自动跟随；禁止在路由/工具层散写平行结构。
+- **前端消费**：只 import `frontend/src/api/types.ts` 的 `paths` / `components` 类型；该文件顶部自带 `Do not make direct changes to the file.`，**严禁手改**。
+- **重跑口径**：`models.py` / `api.py` 变更后必须重跑 gen:api；契约变更的 code review = diff `types.ts`。
+
+### gen:api 标准命令（执行单②在 frontend/package.json 接线为 `npm run gen:api`）
+
+```bash
+# 1) 离线导出契约 schema（无需起服务；也可改从运行中的 serve 拉 http://127.0.0.1:8723/openapi.json）
+uv run python -c "import json; from ledger.api import create_app; \
+  json.dump(create_app().openapi(), open('/tmp/ledger_openapi.json','w'), ensure_ascii=False)"
+
+# 2) 生成 TS 类型（frontend/ 内执行；生成物落 src/api/types.ts）
+npx openapi-typescript /tmp/ledger_openapi.json -o src/api/types.ts
+```
+
+### 金额字段契约纪律（全链路统一）
+
+- 响应侧金额一律为**字符串两位小数**（如 `"12.50"`，`field_serializer` 强制），TS 类型 = `string`；**禁用 float 承载金额**（二进制误差，记账系统铁律）。
+- 请求侧 `amount` 兼容 `number | string`（pydantic `>0`、18 位 2 位小数校验兜底）；MCP 面金额入参为字符串（更严），两者语义一致（同一套 R1 校验）。
+- 前端展示金额原样使用字符串；聚合与统计一律走后端 `/api/v1/stats`、`/api/v1/overview` 等接口（前端零金额算术）。
+
 ## 本地运行（执行单①②落码后生效）
 
 ```bash

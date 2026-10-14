@@ -1,5 +1,26 @@
-"""【占位文件 · 骨架】services.tags — 职责与规则落位见仓库根 README.md 落位表。
+"""services.tags — 标签查询与重命名（创建走交易打标的 get-or-create，输入即建）。"""
 
-归属执行单①（MCP + 业务层 + schema 落码）；业务规则 R1-R7 唯一口径承载层。
-本文件为骨架占位，零业务代码（任务 01a138a2 仓库初始化）。
-"""
+from __future__ import annotations
+
+from ..db import connect
+from ..errors import ConflictError, NotFoundError
+from ..models import TagOut
+
+
+def list_tags() -> list[TagOut]:
+    with connect() as conn:
+        rows = conn.execute("SELECT id, name FROM tags ORDER BY name").fetchall()
+    return [TagOut(id=r[0], name=r[1]) for r in rows]
+
+
+def rename_tag(tag_id: str, name: str) -> TagOut:
+    with connect() as conn:
+        if conn.execute("SELECT 1 FROM tags WHERE id = ?", [tag_id]).fetchone() is None:
+            raise NotFoundError("tag_not_found", f"标签不存在：{tag_id}")
+        if conn.execute(
+            "SELECT 1 FROM tags WHERE name = ? AND id <> ?", [name, tag_id]
+        ).fetchone():
+            raise ConflictError("tag_name_taken", f"标签名已存在：{name}")
+        conn.execute("UPDATE tags SET name = ? WHERE id = ?", [name, tag_id])
+        row = conn.execute("SELECT id, name FROM tags WHERE id = ?", [tag_id]).fetchone()
+    return TagOut(id=row[0], name=row[1])
