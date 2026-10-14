@@ -1,0 +1,2 @@
+/* P0 入口样式：HUD 令牌体系整体平移至 src/theme.css（零新增令牌），此处仅汇入 */
+@import './theme.css';

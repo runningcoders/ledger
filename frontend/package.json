@@ -1,0 +1,33 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "gen:api:openapi": "test ! -f ../ledger/ui/index.html || (echo '[gen:api] 非canonical态: ledger/ui/ 存在 index.html 会使 OpenAPI 丢根路由致 types.ts 漂移, 请先清理构建产物再重跑' && exit 1) && cd .. && uv run python -c \"import json; from ledger.api import create_app; json.dump(create_app().openapi(), open('/tmp/ledger_openapi.json','w'), ensure_ascii=False)\"",
+    "gen:api:types": "openapi-typescript /tmp/ledger_openapi.json -o src/api/types.ts",
+    "gen:api": "npm run gen:api:openapi && npm run gen:api:types"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "daisyui": "^5.7.50",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "recharts": "^3.10.1",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}

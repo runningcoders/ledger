@@ -1,0 +1,2228 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes:
+    orz-hud --default,
+    orz-light;
+}
+
+@source "../index.html";
+@source "../src/**/*.{ts,tsx}";
+@theme {
+  --font-family-sans: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', monospace;
+  --font-display: 'Chakra Petch', 'Sora', sans-serif;
+}
+
+[data-theme="orz-light"] {
+  --color-primary: oklch(0.63 0.24 50);
+  --color-primary-content: oklch(1 0 0);
+  --color-secondary: oklch(0.66 0.23 45);
+  --color-secondary-content: oklch(1 0 0);
+  --color-accent: oklch(0.78 0.16 80);
+  --color-accent-content: oklch(0.2 0.02 50);
+  --color-neutral: oklch(0.25 0.01 50);
+  --color-neutral-content: oklch(0.98 0 0);
+  --color-base-100: oklch(0.98 0.02 85);
+  --color-base-200: oklch(0.96 0.04 80);
+  --color-base-300: oklch(0.92 0.04 75);
+  --color-base-content: oklch(0.25 0.02 50);
+  --color-info: oklch(0.65 0.15 230);
+  --color-info-content: oklch(1 0 0);
+  --color-success: oklch(0.65 0.20 145);
+  --color-success-content: oklch(1 0 0);
+  --color-warning: oklch(0.75 0.18 75);
+  --color-warning-content: oklch(0.2 0.02 50);
+  --color-error: oklch(0.60 0.22 25);
+  --color-error-content: oklch(1 0 0);
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --border-selector: 1px;
+}
+
+/* ============================================================
+ * 未来感「任务指挥中心 / Mission-Control HUD」深色主题
+ * 暖色深墨底 + 品牌橙 #fa520f / 信号黄 #ffd900 为锚，
+ * 去饱和钢蓝仅作数据次色。定义完整 --color-* 令牌，
+ * 现有 DaisyUI 组件读同一组变量即免费换肤（8 主题自适应）。
+ * 刻意避开 AI Slop：青+深色 / 紫蓝渐变 / 霓虹发光。
+ * ============================================================ */
+[data-theme="orz-hud"] {
+  --color-primary: oklch(0.63 0.24 50);
+  --color-primary-content: oklch(0.98 0.02 85);
+  --color-secondary: oklch(0.70 0.10 230);
+  --color-secondary-content: oklch(0.98 0.01 80);
+  --color-accent: oklch(0.87 0.18 95);
+  --color-accent-content: oklch(0.20 0.02 70);
+  --color-neutral: oklch(0.22 0.010 70);
+  --color-neutral-content: oklch(0.92 0.01 80);
+  --color-base-100: oklch(0.17 0.008 70);
+  --color-base-200: oklch(0.21 0.009 70);
+  --color-base-300: oklch(0.26 0.010 70);
+  --color-base-content: oklch(0.92 0.01 80);
+  --color-info: oklch(0.68 0.10 230);
+  --color-info-content: oklch(0.98 0.01 80);
+  --color-success: oklch(0.72 0.16 150);
+  --color-success-content: oklch(0.98 0.01 80);
+  --color-warning: oklch(0.78 0.15 80);
+  --color-warning-content: oklch(0.20 0.02 70);
+  --color-error: oklch(0.64 0.20 25);
+  --color-error-content: oklch(0.98 0.01 80);
+  --radius-selector: 0.3rem;
+  --radius-field: 0.3rem;
+  --radius-box: 0.5rem;
+  --border-selector: 1px;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+/* ============================================================
+ * 表单控件皮肤：静息态主题色发丝边 + 聚焦态流动光带边框
+ * - 静息态：**真实 1px primary 混色边框** —— DaisyUI v5 的 input/select
+ *   默认 border-style: none（完全不画边框，只剩底色微差），这就是
+ *   「输入框与周围标题区分度低、未点击时可见度不足」的根因；
+ * - 聚焦态：与 .hud-signal 同源的「流动小灯带」——双背景渐变
+ *   （padding-box 填充层 + border-box 流光层），光带沿 1px 边框流动；
+ * - select / file-input 聚焦保持静态 primary 边 + 上浮光晕
+ *   （不覆盖 background，保留 DaisyUI 下拉箭头等内建图层）。
+ * 全部走 --color-* 语义变量，随 data-theme 自动适配。
+ * ============================================================ */
+.input,
+.textarea,
+.select,
+.file-input {
+  border: 1px solid color-mix(in oklab, var(--color-primary) 30%, var(--color-base-300));
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+/* 纵向留白：与上下控件保持呼吸感（DaisyUI 表单控件默认无 margin，紧贴容器） */
+.input:not(.input-group *):not(.join *),
+.textarea:not(.input-group *):not(.join *),
+.select:not(.input-group *):not(.join *),
+.file-input:not(.input-group *):not(.join *) {
+  margin-block: 0.5rem;
+}
+
+/* select / file-input：静态聚焦（保留内建 background 图层） */
+.select:focus,
+.select:focus-within,
+.file-input:focus,
+.file-input:focus-within {
+  outline: none;
+  isolation: isolate;
+  border-color: color-mix(in oklab, var(--color-primary) 55%, var(--color-base-content));
+  transform: translateY(-1px);
+  box-shadow:
+    0 8px 20px -8px color-mix(in oklab, var(--color-base-content) 40%, transparent),
+    inset 0 0 0 1.5px color-mix(in oklab, var(--color-primary) 30%, transparent);
+}
+
+/* input / textarea：聚焦 = 流动光带边框 */
+.input:focus,
+.input:focus-within,
+.textarea:focus,
+.textarea:focus-within {
+  outline: none;
+  isolation: isolate;
+  border-color: transparent;
+  transform: translateY(-1px);
+  /* 第 1 层 padding-box = 原玻璃底填充；第 2 层 border-box = 流光，仅边框 1px 可见 */
+  background:
+    linear-gradient(
+      color-mix(in oklab, var(--color-base-100) 65%, transparent),
+      color-mix(in oklab, var(--color-base-100) 65%, transparent)
+    ) padding-box,
+    linear-gradient(
+      90deg,
+      var(--color-base-300),
+      var(--color-primary) 30%,
+      var(--color-accent) 50%,
+      var(--color-primary) 70%,
+      var(--color-base-300)
+    ) border-box;
+  background-size: 100% 100%, 200% 100%;
+  animation: hud-input-border-flow 3.2s linear infinite;
+  box-shadow:
+    0 8px 20px -8px color-mix(in oklab, var(--color-base-content) 40%, transparent),
+    0 0 14px -4px color-mix(in oklab, var(--color-primary) 55%, transparent);
+}
+
+/* 光带流动：只动第 2 层（流光层），首尾同色保证无缝循环 */
+@keyframes hud-input-border-flow {
+  from { background-position: 0 0, 200% 0; }
+  to   { background-position: 0 0, -200% 0; }
+}
+
+/* 减弱动效：聚焦退化为静态 primary 边框 */
+@media (prefers-reduced-motion: reduce) {
+  .input:focus,
+  .input:focus-within,
+  .textarea:focus,
+  .textarea:focus-within {
+    animation: none;
+    border-color: var(--color-primary);
+    background: none;
+  }
+}
+
+/* ============================================================
+ * 驾驶舱风格：HUD 流光条（未读消息提示）
+ * 用法：父元素 position: relative; overflow: hidden;
+ *       <span class="hud-streak" /> 渲染左侧竖条 + 流动高光
+ * ============================================================ */
+@keyframes hud-streak-flow {
+  0%   { transform: translateY(-150%); opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(400%); opacity: 0; }
+}
+
+.hud-streak {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-primary, #fa520f);
+  box-shadow: 0 0 6px 0 var(--color-primary, #fa520f);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hud-streak::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 30%;
+  background: linear-gradient(to bottom, transparent, color-mix(in oklch, var(--color-accent) 35%, transparent), transparent);
+  filter: blur(0.5px);
+  animation: hud-streak-flow 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ============================================================
+ * 知识图谱：HUD 风格高级显示效果
+ * ============================================================ */
+
+/* 1. 背景网格 + 径向光晕 */
+.kg-bg {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(250, 82, 15, 0.08) 0%, transparent 70%),
+    linear-gradient(rgba(250, 82, 15, 0.06) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, rgba(250, 82, 15, 0.06) 1px, transparent 1px) 0 0 / 40px 40px,
+    #0a0e1a;
+}
+
+/* 2. 节点呼吸光晕（未选中态微弱呼吸） */
+@keyframes kg-node-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.9;  transform: scale(1.08); }
+}
+
+/* 3. 选中节点扫描环（向外扩散波纹） */
+@keyframes kg-scan-ring {
+  0%   { r: var(--r0); opacity: 0.9; stroke-width: 2.5; }
+  100% { r: var(--r1); opacity: 0;   stroke-width: 0.3; }
+}
+.kg-scan-ring {
+  animation: kg-scan-ring 1.8s ease-out infinite;
+  transform-origin: center;
+}
+
+/* 4. 节点外环刻度旋转 */
+@keyframes kg-ring-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.kg-ring-spin {
+  animation: kg-ring-rotate 12s linear infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* 5. 节点出现动画（scale + opacity 淡入） */
+@keyframes kg-node-appear {
+  0%   { opacity: 0; transform: scale(0); }
+  60%  { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.kg-node-appear {
+  animation: kg-node-appear 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* 6. 边出现动画 + 流光（实线边持续流动，模拟数据流向） */
+@keyframes kg-edge-flow {
+  from { stroke-dashoffset: var(--len, 200); }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes kg-edge-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.kg-edge-flow {
+  stroke-dasharray: 4 8;
+  animation: kg-edge-flow 1.5s linear infinite, kg-edge-fade-in 0.4s ease-out both;
+}
+
+/* 7. 边发光 */
+.kg-edge-glow {
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+/* 8. HUD 角落装饰（四角刻度线） */
+.kg-corner {
+  stroke: rgba(250, 82, 15, 0.5);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+/* 9. 鼠标 hover 节点放大 */
+.kg-node-group {
+  transition: transform 0.2s ease-out;
+  cursor: pointer;
+}
+.kg-node-group:hover {
+  transform: scale(1.05);
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* 10. 矩形节点卡片 HUD 态（圆形改矩形后的替代动画：
+      kg-scan-ring / kg-ring-spin 依赖 circle 的 r 属性，对 rect 无效） */
+@keyframes kg-box-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.95; }
+}
+.kg-box-pulse {
+  animation: kg-box-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes kg-box-scan {
+  0%   { opacity: 0.75; transform: scale(1); }
+  100% { opacity: 0;    transform: scale(1.12); }
+}
+.kg-box-scan {
+  animation: kg-box-scan 1.8s ease-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* ========== 文档中心 Markdown 渲染样式（pulldown-cmark 输出 HTML） ========== */
+/* 颜色全部引用 DaisyUI 主题变量，随 30+ 主题自动适配 */
+.markdown-body {
+  color: var(--color-base-content);
+  line-height: 1.75;
+  font-size: 0.925rem;
+  word-wrap: break-word;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.6em;
+  line-height: 1.35;
+}
+.markdown-body h1 {
+  font-size: 1.6em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--color-base-300);
+}
+.markdown-body h2 {
+  font-size: 1.35em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-base-300);
+}
+.markdown-body h3 {
+  font-size: 1.15em;
+}
+.markdown-body h4 {
+  font-size: 1.05em;
+}
+.markdown-body p {
+  margin: 0.75em 0;
+}
+.markdown-body a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover {
+  opacity: 0.8;
+}
+
+/* ========== @ 提及 chip（消息正文内的 Agent / 任务 / 项目引用） ========== */
+/* 由 utils::mention 在 Markdown 事件流里注入为 <span class="mention-chip">。
+   提及走文本协议 [@名](type:id)，未识别时会降级成上文的普通 <a>，故此处的
+   样式只需覆盖识别成功的 chip；配色按实体类型区分，全部走主题变量。 */
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.4rem;
+  margin: 0 0.05rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 15%, transparent);
+  background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+  color: var(--color-base-content);
+  font-size: 0.85em;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.mention-chip.mention-agent {
+  border-color: color-mix(in oklab, var(--color-info) 35%, transparent);
+  background: color-mix(in oklab, var(--color-info) 12%, transparent);
+  color: var(--color-info);
+}
+.mention-chip.mention-task {
+  border-color: color-mix(in oklab, var(--color-warning) 35%, transparent);
+  background: color-mix(in oklab, var(--color-warning) 12%, transparent);
+  color: var(--color-warning);
+}
+.mention-chip.mention-project {
+  border-color: color-mix(in oklab, var(--color-secondary) 35%, transparent);
+  background: color-mix(in oklab, var(--color-secondary) 12%, transparent);
+  color: var(--color-secondary);
+}
+/* 跨组织联邦提及（agent:id@org）：叠加修饰，虚线边框区分于组织内实体 */
+.mention-chip.mention-federated {
+  border-style: dashed;
+}
+
+/* ========== @ 提及候选菜单（输入框上方浮层） ========== */
+/* 与 slash 菜单同一层叠策略：absolute 挂在输入区容器内，不脱离文档流，
+   因此跟随输入区一起滚动、不会被消息列表裁切。
+   视觉（切角 + 渐变发丝边 + 阴影）复用浮层原语 `.orz-popover`（见上文的规则组），
+   此处只保留定位与层叠档。 */
+.mention-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0.75rem;
+  right: 0.75rem;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+}
+.mention-menu-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid var(--color-base-300);
+}
+.mention-menu-tab {
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--color-base-content);
+  opacity: 0.6;
+  cursor: pointer;
+}
+.mention-menu-tab:hover {
+  background: var(--color-base-200);
+}
+.mention-menu-tab.is-active {
+  background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  opacity: 1;
+  font-weight: 500;
+}
+/* 提及浮层内的按钮（类型 Tab / 已提及胶囊的移除钮）点击不应出现浏览器默认聚焦白边；
+   鼠标点击已在 RS 侧用 onmousedown + prevent_default 防止抢焦，这里再兜一层：
+   即便键盘聚焦，也用极细的主题色描边替换默认近白色 outline，兼顾可达性。 */
+.mention-menu-tab:focus,
+.mention-chip button:focus {
+  outline: none;
+}
+.mention-menu-tab:focus-visible,
+.mention-chip button:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-primary) 45%, transparent);
+  outline-offset: 1px;
+}
+.mention-menu-body {
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+.mention-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+.mention-menu-item.is-active {
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+}
+/* 范围标签（当前接待 / 当前项目 / 未在项目内）：行尾中性胶囊，只解释「这条候选
+   与当前会话作用域的关系」，不参与类型配色 —— 类型语义已由左侧彩色 chip 承担。
+   margin-left: auto 顶到行尾；flex-shrink: 0 保证副标题截断时标签不跟着被压扁。 */
+.mention-menu-flag {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--color-base-content);
+  opacity: 0.55;
+  white-space: nowrap;
+}
+.mention-menu-hint {
+  padding: 0.25rem 0.625rem;
+  border-top: 1px solid var(--color-base-300);
+  font-size: 0.6875rem;
+  color: var(--color-base-content);
+  opacity: 0.5;
+}
+.markdown-body strong {
+  font-weight: 700;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.75em 0;
+  padding-left: 1.6em;
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body ul ul {
+  list-style: circle;
+}
+.markdown-body li {
+  margin: 0.3em 0;
+}
+.markdown-body li > input[type='checkbox'] {
+  margin-right: 0.5em;
+}
+.markdown-body blockquote {
+  margin: 1em 0;
+  padding: 0.4em 1em;
+  border-left: 4px solid var(--color-primary);
+  background: var(--color-base-200);
+  border-radius: 0 0.375rem 0.375rem 0;
+  opacity: 0.9;
+}
+.markdown-body blockquote p {
+  margin: 0.4em 0;
+}
+.markdown-body code {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  background: var(--color-base-200);
+  border: 1px solid var(--color-base-300);
+  border-radius: 0.3rem;
+}
+.markdown-body pre {
+  margin: 1em 0;
+  padding: 0.9em 1.1em;
+  background: var(--color-base-200);
+  border: 1px solid var(--color-base-300);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.markdown-body table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875em;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--color-base-300);
+  padding: 0.5em 0.8em;
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--color-base-200);
+  font-weight: 600;
+}
+.markdown-body tr:nth-child(even) td {
+  background: color-mix(in oklab, var(--color-base-200) 50%, transparent);
+}
+.markdown-body hr {
+  margin: 1.5em 0;
+  border: none;
+  border-top: 1px solid var(--color-base-300);
+}
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+}
+
+/* ========== Markdown 紧凑变体（聊天气泡 / 卡片 / 列表展开） ========== */
+/* 收紧字号与上下边距，避免块级留白在小容器内显得空旷 */
+.markdown-compact {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.markdown-compact > :first-child {
+  margin-top: 0;
+}
+.markdown-compact > :last-child {
+  margin-bottom: 0;
+}
+.markdown-compact h1,
+.markdown-compact h2,
+.markdown-compact h3,
+.markdown-compact h4,
+.markdown-compact h5,
+.markdown-compact h6 {
+  margin-top: 0.9em;
+  margin-bottom: 0.4em;
+}
+.markdown-compact h1 { font-size: 1.25em; }
+.markdown-compact h2 { font-size: 1.12em; }
+.markdown-compact h3 { font-size: 1.02em; }
+.markdown-compact p,
+.markdown-compact ul,
+.markdown-compact ol,
+.markdown-compact pre,
+.markdown-compact table,
+.markdown-compact blockquote {
+  margin: 0.5em 0;
+}
+.markdown-compact li {
+  margin: 0.15em 0;
+}
+
+/* ========== 聊天气泡：宽度自适应 + 轻量配色 ========== */
+
+/* 1) 宽度：hug 文本内容（短消息贴身、长消息封顶），避免文字竖排。
+   ⚠️ 坑：气泡的 max-width 里**绝不能**用百分比。chat.rs 的气泡外面还包了一层
+   `div.group.relative`（`.chat` 的 grid item，被 `place-items:end/start` 收缩到
+   fit-content），百分比会相对这个「已经 hug 到内容宽度」的父容器计算，等于在
+   fit-content 之上再砍一刀。无头浏览器实测（720px 容器）：
+     - 气泡直挂 `.chat`：270.1px / 1 行（正常）
+     - 同文本 + group 包裹：243.1px / 2 行（270.1 × 90%，被砍）
+     - 「在吗」+ group 包裹：57.4px / 2 行（63.8 × 90%，俩字硬换行）
+   现在：百分比约束上移到 `.chat` 的直接子元素（相对 grid 列宽，参照正确，窄屏也留边），
+   气泡本身只用固定上限 28rem（= Tailwind `max-w-md`，与附件消息卡片宽度一致）。 */
+.chat > *:not(.chat-image) {
+  max-width: 90%;
+}
+.chat .chat-bubble {
+  width: fit-content;
+  max-width: 28rem;
+}
+/* 气泡内的 markdown 不应再继承全局 `max-w-none`（详情页/文档页需要铺满），
+   而是填满气泡宽度，配合上面的 fit-content 正确换行。 */
+.chat .chat-bubble .markdown-body {
+  max-width: 100%;
+}
+
+/* 1.1) 引用块宽度：以**本条消息**的宽度为上限，不被引用内容反向撑宽。
+   气泡外还包了一层 `div.group.relative`（引用块 + 气泡 + hover 图标排）。如果让引用块
+   参与父容器的固有宽度计算，长引用就会把整块撑到列宽的 90% —— 短消息的气泡明明只有
+   几十 px，却停在宽块的左边缘，视觉上「被甩到最左边」。
+   无头浏览器实测（720px 列，「在吗」+ 长引用）：
+     - 现状：wrap 601.2px / 气泡 64px（气泡压左边缘）
+     - 修复：wrap 64px（= 气泡宽），整块贴右对齐；长主体同理（448px = 448px）
+   做法：`width: 0` 让引用块的固有宽度贡献为 0（父容器宽度改由气泡的 fit-content 决定），
+   再用 `min-width: 100%` 在布局阶段铺满该宽度；配合 2 行截断避免短消息旁竖成一行字。 */
+.chat .chat-quote {
+  width: 0;
+  min-width: 100%;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* 1.2) 有引用时给整块一个最小宽度：太短的消息（如「在吗」）旁边的引用块会被压到
+   2 字一行，比被撑宽还难读。最小宽度必须挂在**包裹层**（`.chat` 的 grid item），
+   并让气泡铺满它。
+   ⚠️ 别把 min-width 挂在气泡上：气泡会越过包裹层的 `max-width: 90%` 溢出去，
+   引用块（=100% 包裹层）就与气泡错位（无头实测 240px 列 MISMATCH）。
+   用 `min(14rem, 90%)` 而不是 `min(14rem, 100%)`：min-width 会压过 max-width，
+   取 100% 时窄屏会顶到列边、丢掉 `max-width: 90%` 留的右边距。
+   无头实测（chromium + 真实产物）：
+     - 720px 列：短主体 224px / 长主体 448px（不受影响），wrap = 气泡 = 引用块
+     - 300px 列：223.2px（收敛到 90%），三者仍相等
+     - 240px 列：169.2px（= 90%，保住右边距），三者仍相等 */
+.chat .chat-has-quote {
+  min-width: min(14rem, 90%);
+}
+.chat .chat-has-quote .chat-bubble {
+  width: 100%;
+}
+
+/* 2) 配色：DaisyUI 原生 `chat-bubble-primary` / `chat-bubble-neutral` 是高饱和 / 近黑
+   **实底**（浅色主题实测 primary = oklch(0.63 0.24 50) 橙实底、
+   neutral = oklch(0.25 0.01 50) 近黑实底），背景过重、正文被压得不显眼。
+   改为「浅底 + 正文色文字 + 细边」：内容成为视觉主体，身份靠底色/边框区分。
+   用 color-mix 混 `--color-base-100`，8 个主题（含深色）自动适配。
+   只作用于 `.chat` 内，不影响其它复用 chat-bubble-* 的地方。 */
+/* 用户气泡：HUD 玻璃质感——primary 浅底 + 左 accent 边 + 微光投影 */
+.chat .chat-bubble-primary {
+  background: color-mix(in oklab, var(--color-primary) 14%, var(--color-base-100));
+  color: var(--color-base-content);
+  border: 1px solid color-mix(in oklab, var(--color-primary) 35%, transparent);
+  border-left: 3px solid var(--color-primary);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 12%, transparent),
+              0 6px 20px -10px color-mix(in oklab, var(--color-primary) 55%, transparent);
+}
+/* Agent 气泡：中性玻璃 + 细边 + 轻投影（层次感） */
+.chat .chat-bubble-neutral {
+  background: color-mix(in oklab, var(--color-base-content) 4%, var(--color-base-100));
+  color: var(--color-base-content);
+  border: 1px solid var(--color-base-300);
+  box-shadow: 0 4px 16px -12px rgba(0, 0, 0, 0.5);
+}
+/* 系统提示气泡：原 `chat-bubble-info/20 text-info-content` 在浅底上文字发虚，
+   改为浅 info 底 + info 色文字（对比度稳定）+ 左 info 边 + 微光。 */
+.chat .chat-bubble-system {
+  background: color-mix(in oklab, var(--color-info) 12%, var(--color-base-100));
+  color: color-mix(in oklab, var(--color-info) 75%, var(--color-base-content));
+  border: 1px solid color-mix(in oklab, var(--color-info) 30%, transparent);
+  border-left: 3px solid var(--color-info);
+  box-shadow: 0 6px 20px -10px color-mix(in oklab, var(--color-info) 50%, transparent);
+}
+/* 头像 HUD 细环：与气泡玻璃质感呼应。两条硬约束（2026-09-14 无头实测）：
+   ① 描边必须精确命中「圆」本身，两种头像结构都要覆盖：
+      - 系统提示头像：`.chat-image.avatar > 圆`（avatar 就是宿主）
+      - AvatarBubble 头像：`.chat-image > .dropdown > .avatar > 圆`
+      只写 `.chat .chat-image > div` 会在气泡结构下命中 `.dropdown` 包装层（40×40 方框），
+      细环变成方角描边而不是描在圆上。
+   ② **外圈光晕必须画在 `.avatar` 宿主上，绝不占用「圆」的 `box-shadow`**：
+      生命周期状态环（`utils/status.rs::avatar_status_ring`）走 Tailwind `ring-*`，
+      实现同样是 `box-shadow`；而本规则选择器权重 (0,3,1) 高于 `.ring-2` (0,1,0)，
+      一旦写在圆上就会把状态环整条 `box-shadow`（含 ring-offset 实色圈 + 彩色环）
+      覆盖掉 —— 症状是「状态环在聊天页完全不显示，却能在侧栏/卡片里显示」。
+      拆到宿主上后两者分属不同元素，互不争用（有状态环时 offset 实色圈自然压住光晕）。 */
+.chat .chat-image.avatar > div,
+.chat .chat-image .avatar > div {
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 15%, transparent);
+}
+.chat .chat-image.avatar,
+.chat .chat-image .avatar {
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-base-content) 6%, transparent);
+}
+
+/* 3) 气泡内的 markdown 内嵌块（code / pre / blockquote / 表头）原本统一用
+   `--color-base-200` 作背景。Agent 气泡改成 `base-200` 浅底后，这些块会与气泡
+   **同色而整块消失**（只剩 1px 边框）。统一改用「半透明中性加深」：叠加在任何
+   气泡底色（primary 浅底 / base-200 / info 浅底）之上都能形成层次，且随主题自适应。 */
+.chat .chat-bubble .markdown-body code,
+.chat .chat-bubble .markdown-body pre,
+.chat .chat-bubble .markdown-body blockquote,
+.chat .chat-bubble .markdown-body th {
+  background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+  border-color: color-mix(in oklab, var(--color-base-content) 16%, transparent);
+}
+.chat .chat-bubble .markdown-body blockquote {
+  border-left: 4px solid var(--color-primary);
+}
+.chat .chat-bubble .markdown-body pre code {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* ========== 统一标签（tag / chip）样式 ========== */
+/* 实体属性标签（角色 / 类型 / 标签 cloud / 来源类型等「打在主体上的 tag」）统一风格。
+   对齐 hud_design_prototype.html 的 .badge-tag：中性 pill（圆角 999px）+ JetBrains Mono
+   11px/600 + 充足内边距 + line-height:1.4 + nowrap。
+   - 中性表面（base-content 7% 底 + 14% 边）不抢品牌橙，解决「颜色不搭」；
+   - 1px 一致描边 + 内边距 + 行高，解决「边框粗细不一 / 文字贴边 / 文字被裁切」。 */
+.badge.orz-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  line-height: 1.4;
+  white-space: nowrap;
+  padding: .2rem .6rem;
+  border-radius: 999px;
+  color: color-mix(in oklab, var(--color-base-content) 82%, transparent);
+  background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent);
+}
+.badge.orz-tag.badge-sm { font-size: 11px; padding: .18rem .55rem; }
+.badge.orz-tag.badge-xs { font-size: 10px; padding: .12rem .45rem; }
+
+/* Reception 登录/注册 Tab */
+.reception-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-base-300);
+  margin-bottom: 1rem;
+}
+.reception-tab {
+  flex: 1;
+  text-align: center;
+  padding: 0.5rem 0;
+  cursor: pointer;
+  font-weight: 500;
+  color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.reception-tab:hover {
+  color: color-mix(in oklab, var(--color-base-content) 90%, transparent);
+}
+.reception-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* 邀请码校验反馈 */
+.reception-invite-ok {
+  font-size: 0.8rem;
+  color: var(--color-success);
+  margin-top: 0.25rem;
+}
+.reception-invite-bad {
+  font-size: 0.8rem;
+  color: var(--color-error);
+  margin-top: 0.25rem;
+}
+
+/* ========== 缺失的基础组件样式补全 ========== */
+/* 表单字段标签：原 .form-label 在 16 个文件中使用却从未定义，导致标签无层级、像正文。 */
+.form-label {
+  display: block;
+  font-size: 0.825rem;
+  font-weight: 500;
+  color: var(--color-base-content);
+  margin-bottom: 0.3rem;
+}
+
+/* 详情表格重点值 */
+.detail-table-value-bold {
+  font-weight: 600;
+}
+
+/* ========== 统一布局原语（修复大量「使用了却从未定义」的自定义类） ========== */
+/* 这些类在页面中被广泛使用，但此前在 input.css / index.html 中均无 CSS 规则， */
+/* 导致：卡片内容无内边距、统计网格塌缩、页面头/进度条/标签列表/表单提示无样式。 */
+/* 以下统一以主题自适应（--color-*）方式补全，全部为新增规则，不会与既有样式冲突。 */
+
+/* ---- 卡片头（自定义卡片用 card-header 而非 card-body） ---- */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-base-300);
+}
+.card-header .card-title { margin: 0; }
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+/* 含 card-header 的自定义卡片：内容区统一内边距（标准 card-body 不受影响） */
+.card:has(.card-header) > *:not(.card-header):not(.card-body) {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+.card-header + * { padding-top: 1.25rem; }
+.card:has(.card-header) > *:last-child:not(.card-header) { padding-bottom: 1.25rem; }
+
+/* ---- 页面头：标题 + 操作区 ---- */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.page-title { font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
+.page-header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+
+/* ---- 详情网格与卡片内容 ---- */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem 1.5rem;
+}
+/* ---- 长文本区（项目/任务描述等 Agent 可能写入的长 Markdown）----
+   独立成块 + 限高滚动：短文本不触发（无滚动条），超长文本内部滚动，
+   不再把同页 detail-grid 的短字段网格撑变形、把后续面板挤出首屏。
+   与 .soul-prompt / .graph-detail-content-box 同一「限高滚动」做法。
+   无头实测（720px 内容宽 / 同一段长文）：留在 detail-grid 内时描述被挤进
+   210px 列 → 单元格高 1619.6px、整格 1685.2px，同排的短字段被 align-items:stretch
+   一起拉到 1619.6px；改独立成块后基本信息网格 114.2px、描述容器 678×512、
+   内部 scrollHeight 1565（长文自滚），420px 窄视口复测仍为 512 且无横向溢出。 */
+.detail-longtext {
+  max-height: 32rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+}
+.detail-section { margin-bottom: 1rem; }
+.detail-section:last-child { margin-bottom: 0; }
+.detail-card-body { display: block; }
+.detail-action-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+/* ---- 标签列表（中性 soft chip 容器） ---- */
+.tag-list { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+/* ---- 表单辅助类 ---- */
+.form-input,
+.form-select,
+.form-textarea { width: 100%; }
+.form-hint {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+}
+
+/* ---- 可点击表格行：指针 + 悬停反馈（此前无反馈，用户不知行可点） ---- */
+.table-row-clickable {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.table-row-clickable:hover {
+  background-color: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+}
+
+/* ---- Toast 动画（toast-visible / toast-leaving / toast-progress 统一在此定义，已从 index.html 迁入） ---- */
+.toast-visible { animation: toast-in 0.3s ease-out; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+
+/* =========================================================================
+ * App custom styles — migrated from index.html to v5 (DaisyUI v5 / Tailwind v4).
+ * All legacy `--fallback-*` variables replaced with v5 `--color-*` theme tokens,
+ * so these components now correctly follow data-theme (including dark mode).
+ * Single source of truth: this file (input.css). index.html no longer carries a
+ * duplicate <style> block.
+ * ========================================================================= */
+
+      /* ===== HUD 玻璃悬浮面板（工作台驾驶舱） ===== */
+      /* 半透明 + 背景模糊，悬浮在关系图（全屏底层 canvas）之上，呈现游戏 HUD 质感。
+         所有颜色走 v5 主题变量，随 data-theme 变化。 */
+      .hud-glass {
+        background: color-mix(in oklch, var(--color-base-100) 72%, transparent);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid color-mix(in oklch, var(--color-base-content) 12%, transparent);
+        border-radius: var(--radius-box, 0.75rem);
+        box-shadow: 0 4px 24px -8px color-mix(in oklch, var(--color-base-content) 18%, transparent);
+      }
+      .hud-glass-strong {
+        background: color-mix(in oklch, var(--color-base-100) 82%, transparent);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      .hud-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      .hud-collapse-btn {
+        cursor: pointer;
+        opacity: 0.65;
+        transition: opacity 0.15s ease;
+        line-height: 1;
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+      .hud-collapse-btn:hover { opacity: 1; }
+
+      /* ===== Base Styles ===== */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      }
+
+      /* ===== Typing Indicator Animation ===== */
+      .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: currentColor;
+        opacity: 0.5;
+        animation: typing-bounce 1.4s infinite ease-in-out both;
+      }
+      .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+      .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+      @keyframes typing-bounce {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
+      }
+
+      /* ===== Brand Logo (Navbar) — 品牌渐变文字，沿用 reception 的 background-clip:text 写法 ===== */
+      .orz-brand-logo {
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        background: linear-gradient(90deg, #ffd900 0%, #ffa110 50%, #fa520f 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+        cursor: pointer;
+      }
+
+      /* ===== Tool Call Card (Chat) ===== */
+      .tool-card {
+        border: 1px solid var(--color-base-300);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        max-width: 420px;
+      }
+      .tool-card-request { border-left: 3px solid var(--color-info); }
+      .tool-card-success { border-left: 3px solid var(--color-success); }
+      .tool-card-error { border-left: 3px solid var(--color-error); }
+      .tool-card-result { border-left: 3px solid var(--color-primary); }
+
+      .tool-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        background: var(--color-base-200);
+        cursor: pointer;
+        user-select: none;
+        font-size: 0.9rem;
+      }
+      .tool-card-header:hover { background: var(--color-base-300); }
+      .tool-card-icon { font-size: 1rem; }
+      .tool-card-title { flex: 1; font-weight: 500; }
+      .tool-card-status { font-size: 0.75rem; opacity: 0.6; }
+      .tool-card-expand { opacity: 0.6; font-size: 0.75rem; }
+      .tool-card-body {
+        padding: 0.75rem 1rem;
+        background: var(--color-base-100);
+        border-top: 1px solid var(--color-base-300);
+      }
+      .tool-card-section { margin-bottom: 0.75rem; }
+      .tool-card-section:last-child { margin-bottom: 0; }
+      .tool-card-label { font-size: 0.75rem; opacity: 0.6; margin-bottom: 0.25rem; }
+      .tool-card-json {
+        font-size: 0.8rem;
+        font-family: 'SF Mono', Menlo, 'Cascadia Code', monospace;
+        background: var(--color-base-200);
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+        max-height: 200px;
+      }
+      .tool-card-error-msg { color: var(--color-error); }
+
+      /* ===== Task Assignment Card (Chat) ===== */
+      .task-card {
+        background: var(--color-base-100);
+        border: 1px solid var(--color-base-300);
+        border-radius: 0.5rem;
+        max-width: 320px;
+      }
+      .task-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--color-base-200);
+        border-bottom: 1px solid var(--color-base-300);
+      }
+      .task-card-icon { font-size: 1rem; }
+      .task-card-title { font-weight: 600; font-size: 0.85rem; color: var(--color-base-content); }
+      .task-card-body { padding: 0.75rem; }
+      .task-card-name { font-weight: 500; font-size: 0.95rem; color: var(--color-base-content); }
+      .task-card-desc { font-size: 0.8rem; color: color-mix(in oklab, var(--color-base-content) 70%, transparent); margin-top: 0.25rem; }
+
+      /* ===== Message Attachments ===== */
+      .message-attachment { max-width: 320px; }
+      .message-image { max-width: 100%; max-height: 300px; border-radius: 0.5rem; cursor: pointer; }
+      .message-audio { width: 200px; height: 32px; }
+      .attachment-download {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: var(--color-base-200);
+        border-radius: 0.5rem;
+        text-decoration: none;
+        color: inherit;
+        transition: background 0.15s ease;
+      }
+      .attachment-download:hover { background: var(--color-base-300); }
+
+      /* ===== Pending Attachments (Chat Input) ===== */
+      .chat-pending-attachment {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.6rem 0.4rem 0.75rem;
+        background: color-mix(in oklch, var(--color-primary) 10%, transparent);
+        border: 1px solid var(--color-primary);
+        border-radius: 9999px;
+        font-size: 0.85rem;
+        max-width: 240px;
+      }
+      .chat-pending-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 160px;
+      }
+      .chat-pending-remove {
+        background: transparent;
+        border: none;
+        opacity: 0.6;
+        cursor: pointer;
+        font-size: 1.1rem;
+        line-height: 1;
+        padding: 0 0.2rem;
+        flex-shrink: 0;
+      }
+      .chat-pending-remove:hover { color: var(--color-error); opacity: 1; }
+
+      /* ===== Reception / Login Page ===== */
+      .reception-page {
+        display: flex;
+        min-height: 100vh;
+      }
+      .reception-brand {
+        flex: 1;
+        background: linear-gradient(135deg, #1f1f1f 0%, #2d1a0a 40%, #3d200a 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 3rem 4rem;
+        position: relative;
+        overflow: hidden;
+      }
+      .reception-brand::before {
+        content: '';
+        position: absolute;
+        top: -30%; right: -20%;
+        width: 500px; height: 500px;
+        background: radial-gradient(circle, rgba(250, 82, 15, 0.15) 0%, transparent 70%);
+        pointer-events: none;
+      }
+      .reception-brand::after {
+        content: '';
+        position: absolute;
+        bottom: -20%; left: -10%;
+        width: 400px; height: 400px;
+        background: radial-gradient(circle, rgba(255, 209, 0, 0.08) 0%, transparent 70%);
+        pointer-events: none;
+      }
+      .reception-brand-content { position: relative; z-index: 1; max-width: 480px; }
+      .reception-brand-logo {
+        display: flex; align-items: center; gap: 0.75rem; margin-bottom: 3rem;
+      }
+      .reception-brand-logo-mark {
+        width: 44px; height: 44px;
+        background: linear-gradient(135deg, #ffd900 0%, #ff8105 50%, #fa520f 100%);
+        border-radius: 0.375rem;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; font-weight: 800; color: #1f1f1f; letter-spacing: -1px;
+      }
+      .reception-brand-logo-text {
+        font-size: 1.5rem; font-weight: 700; color: #ffd900; letter-spacing: -0.5px;
+      }
+      .reception-brand-headline {
+        font-size: 2.75rem; font-weight: 800; color: #ffffff;
+        line-height: 1.15; letter-spacing: -1px; margin-bottom: 1.5rem;
+      }
+      .reception-brand-headline-accent {
+        background: linear-gradient(90deg, #ffd900 0%, #ffa110 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      }
+      .reception-brand-subtitle {
+        font-size: 1.05rem; color: rgba(255,255,255,0.6); line-height: 1.6; margin-bottom: 3rem;
+      }
+      .reception-brand-features { display: flex; flex-direction: column; gap: 1.25rem; }
+      .reception-brand-feature { display: flex; align-items: flex-start; gap: 0.75rem; }
+      .reception-brand-feature-icon {
+        width: 32px; height: 32px; border-radius: 0.375rem;
+        background: rgba(250, 82, 15, 0.15);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 16px; flex-shrink: 0;
+      }
+      .reception-brand-feature-text { color: rgba(255,255,255,0.8); font-size: 0.95rem; line-height: 1.5; }
+      .reception-brand-feature-text strong { color: #ffffff; font-weight: 600; display: block; margin-bottom: 2px; }
+      .reception-form-side {
+        flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem;
+      }
+      .reception-form-card { width: 100%; max-width: 420px; }
+      .reception-form-header { text-align: center; margin-bottom: 2rem; }
+      .reception-form-title { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+      .reception-form-desc { font-size: 0.95rem; opacity: 0.7; }
+      .reception-org-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
+      .reception-org-item {
+        padding: 0.875rem 1rem;
+        border-radius: 0.375rem;
+        border: 2px solid var(--color-base-300);
+        background: var(--color-base-100);
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .reception-org-item:hover {
+        border-color: color-mix(in oklch, var(--color-primary) 40%, transparent);
+        background: var(--color-base-200);
+      }
+      .reception-org-item.selected {
+        border-color: var(--color-primary);
+        background: var(--color-base-200);
+      }
+      .reception-org-name { font-weight: 600; font-size: 0.95rem; }
+      .reception-org-desc { font-size: 0.85rem; opacity: 0.7; margin-top: 2px; }
+      .reception-org-section + .reception-org-section { margin-top: 1rem; }
+      .reception-org-section-title {
+        font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em;
+        opacity: 0.6; text-transform: uppercase; margin-bottom: 0.5rem;
+      }
+      .reception-org-badge {
+        display: inline-block; font-size: 0.7rem; font-weight: 700;
+        padding: 0.1rem 0.45rem; border-radius: 9999px; margin-right: 0.5rem;
+        vertical-align: middle;
+      }
+      .reception-org-badge.local {
+        color: var(--color-primary-content);
+        background: var(--color-primary);
+      }
+      .reception-org-badge.remote {
+        color: var(--color-base-content);
+        background: var(--color-base-300);
+        border: 1px solid var(--color-base-300);
+      }
+
+      /* ===== 初始化卡片（模型配置） ===== */
+      .init-model-card {
+        border: 1px solid var(--color-base-300);
+        border-radius: 0.5rem;
+        background-color: var(--color-base-200);
+        padding: 0.875rem 1rem;
+      }
+      .init-model-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      .init-model-card-header .label { margin-bottom: 0; }
+      .init-model-card-sub {
+        font-size: 0.8rem;
+        color: var(--color-base-300);
+      }
+      .init-model-card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.875rem;
+        padding-top: 0.875rem;
+        border-top: 1px dashed var(--color-base-300);
+      }
+      .init-model-card-hint {
+        margin-top: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        background: color-mix(in oklch, var(--color-warning) 12%, transparent);
+        color: var(--color-warning);
+        border-radius: 0.375rem;
+        font-size: 0.8rem;
+        line-height: 1.4;
+      }
+
+      @media (max-width: 768px) {
+        .reception-page { flex-direction: column; }
+        .reception-brand { padding: 2rem; min-height: auto; }
+        .reception-brand-headline { font-size: 1.75rem; }
+        .reception-brand-features { display: none; }
+        .reception-form-side { padding: 1.5rem; }
+      }
+
+      /* ===== 初始化进度条 ===== */
+      .init-progress-container {
+        display: flex; flex-direction: column; align-items: center;
+        text-align: center; padding: 2rem 1.5rem; gap: 0.75rem;
+      }
+      .init-progress-spinner {
+        width: 40px; height: 40px;
+        border: 3px solid var(--color-base-300);
+        border-top-color: var(--color-primary);
+        border-radius: 50%;
+        animation: init-spin 0.8s linear infinite;
+        margin-bottom: 0.5rem;
+      }
+      @keyframes init-spin { to { transform: rotate(360deg); } }
+      .init-progress-icon.failed {
+        width: 40px; height: 40px; border-radius: 50%;
+        background: var(--color-error);
+        color: #fff; font-size: 1.5rem; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 0.5rem;
+      }
+      .init-progress-title { font-size: 1.25rem; font-weight: 700; }
+      .init-progress-step { font-size: 0.95rem; opacity: 0.8; }
+      .init-progress-count { font-size: 0.85rem; opacity: 0.6; font-variant-numeric: tabular-nums; }
+      .init-progress-error {
+        font-size: 0.85rem; color: var(--color-error);
+        background: color-mix(in oklch, var(--color-error) 10%, transparent);
+        padding: 0.5rem 0.75rem; border-radius: 0.375rem; margin-top: 0.5rem;
+        max-width: 100%; word-break: break-word;
+      }
+
+      /* ===== Knowledge Graph ===== */
+      .graph-container { display: flex; gap: 1.5rem; }
+      .graph-main { flex: 1; min-width: 0; }
+      .graph-detail-panel { width: 320px; flex-shrink: 0; }
+      .graph-detail-panel .card { position: sticky; top: 5rem; }
+      .graph-detail-content-box {
+        font-size: 0.9rem; line-height: 1.6; word-break: break-word;
+        padding: 0.75rem;
+        background-color: var(--color-base-200);
+        border-radius: 0.375rem;
+        max-height: 180px; overflow-y: auto;
+      }
+      .graph-legend-item {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 0.8rem; opacity: 0.6;
+      }
+      .graph-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+      .graph-legend-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-base-300); }
+      .graph-legend-title { font-size: 12px; opacity: 0.6; margin-bottom: 4px; font-weight: 500; }
+      .graph-legend-line {
+        display: inline-block; width: 24px; height: 3px; border-radius: 2px;
+        margin-right: 4px; vertical-align: middle;
+      }
+      .graph-legend-line.dashed {
+        background-image: repeating-linear-gradient(to right, currentColor 0, currentColor 5px, transparent 5px, transparent 10px);
+        background-color: transparent; color: inherit;
+      }
+      @media (max-width: 768px) {
+        .graph-container { flex-direction: column; }
+        .graph-detail-panel { width: 100%; }
+      }
+
+      /* ===== Kanban Board ===== */
+      .kanban-board { display: flex; gap: 1rem; overflow-x: auto; padding: 1rem 0; }
+      .kanban-column {
+        flex: 0 0 300px;
+        background-color: var(--color-base-200);
+        border-radius: 0.5rem;
+        display: flex; flex-direction: column;
+      }
+      .kanban-column-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--color-base-300);
+      }
+      .kanban-column-count {
+        background-color: var(--color-primary);
+        color: var(--color-primary-content);
+        font-size: 12px; font-weight: bold;
+        padding: 2px 8px; border-radius: 9999px;
+      }
+      .kanban-column-content {
+        flex: 1; padding: 0.75rem;
+        display: flex; flex-direction: column; gap: 0.75rem;
+        overflow-y: auto;
+      }
+      .kanban-card {
+        background-color: var(--color-base-100);
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        cursor: pointer;
+        transition: box-shadow 0.15s, transform 0.15s;
+        border: 1px solid var(--color-base-300);
+      }
+      .kanban-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-2px); }
+      .kanban-card-header {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 0.5rem; margin-bottom: 0.5rem;
+      }
+      .kanban-card-title {
+        font-size: 14px; font-weight: 500; margin: 0; flex: 1; line-height: 1.4;
+      }
+      .kanban-card-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem; }
+      .kanban-card-progress { display: flex; align-items: center; gap: 0.5rem; }
+      .kanban-progress-bar {
+        flex: 1; height: 6px; border-radius: 9999px;
+        background-color: var(--color-base-300);
+        overflow: hidden;
+      }
+      .kanban-progress-fill { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+
+      /* ===== Agent Detail Chat ===== */
+      .agent-chat-container {
+        display: flex; flex-direction: column; height: 400px;
+        border: 1px solid var(--color-base-300);
+        border-radius: 0.375rem; overflow: hidden;
+      }
+      .agent-chat-messages {
+        flex: 1; overflow-y: auto; padding: 0.75rem;
+        background: var(--color-base-200);
+        display: flex; flex-direction: column; gap: 0.5rem;
+      }
+
+      /* ===== 消息气泡 MessageBubble（Agent 详情页 / 工作台底部对话框复用）=====
+         `message-*` 一族此前从未绑定 CSS，气泡只是裸文本流，发送者信息无层次。
+         配色沿用主对话页气泡的「轻量」原则：浅底 + 正文色 + 细边，
+         身份只体现在头像底色，避免高饱和实底压过正文。 */
+      .message-item {
+        display: flex; align-items: flex-start; gap: 0.5rem;
+      }
+      .message-avatar {
+        flex: none; width: 2rem; height: 2rem;
+        border-radius: 9999px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.75rem; font-weight: 700;
+        background: var(--color-base-300);
+        color: var(--color-base-content);
+        user-select: none;
+      }
+      .message-body {
+        /* min-width:0 —— flex 子项默认 min-width:auto，长内容（代码块/长单词）
+           会把容器撑破，必须显式允许收缩 */
+        min-width: 0; flex: 1;
+        background: var(--color-base-100);
+        border: 1px solid var(--color-base-300);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
+      }
+      .message-meta {
+        display: flex; align-items: center; gap: 0.375rem;
+        margin-bottom: 0.25rem;
+        font-size: 0.6875rem; line-height: 1.2;
+      }
+      .message-sender {
+        font-weight: 600;
+        color: var(--color-base-content);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        max-width: 40%;
+      }
+      .message-role {
+        flex: none;
+        padding: 0 0.375rem; border-radius: 9999px;
+        background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+        color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+      }
+      .message-time {
+        flex: none; margin-left: auto;
+        color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+      }
+      /* 「发给谁」箭头 + 接收方 chip：群聊（项目会话）里标出消息的去向。
+         chip 本体复用正文 @ 提及的 .mention-chip（见上文），这里只把字号拉回
+         气泡头部的 meta 级别 —— 否则 0.85em 相对 meta 会小到看不清。 */
+      .message-arrow {
+        flex: none;
+        color: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+      }
+      .message-receiver { flex: none; display: inline-flex; min-width: 0; }
+      .message-meta .mention-chip { font-size: 0.625rem; padding: 0 0.3rem; }
+      /* 头像对齐气泡**顶边**：DaisyUI `.chat-image` 默认 `align-self: flex-end`，
+         即贴着（含 footer 的）气泡底部，看起来像头像"掉在消息下面"。
+         主流 IM（微信 / Telegram / Slack）都把头像放在消息起始位置，这里统一改回
+         start，让头像与 chat-header（发送者 + 接收方）齐平。 */
+      .chat .chat-image { align-self: start; }
+      /* 尖角跟随头像（体验问题排查专项-问题二，方案 A）：DaisyUI 5.7.0 的
+         `.chat-bubble::before` 尖角硬编码贴气泡底边（bottom:0），而头像已按产品
+         决策改到顶边（上一条规则），尖角与头像脱钩导致指向错位。这里把尖角整体
+         翻到气泡顶边并垂直翻转：mask 形状的底边水平线翻转为顶边、尖点由左下/
+         右下变为左上/右上，仍指向头像一侧；mask-position 的 -1px 子像素补偿在
+         垂直翻转后恰好令形状顶边贴合气泡顶边，无需调整；抹平圆角同步由底角换到
+         对应顶角，底角恢复 --radius-field 与原生一致。
+         chat-end 的水平镜像靠 rotateY(180deg)，覆盖 transform 时必须保留，
+         否则右侧尖角会翻错方向 —— 故分方位覆盖。 */
+      .chat .chat-bubble::before { bottom: auto; top: 0; }
+      .chat .chat-start .chat-bubble::before { transform: scaleY(-1); }
+      .chat .chat-end .chat-bubble::before { transform: scaleY(-1) rotateY(180deg); }
+      .chat .chat-start .chat-bubble {
+        border-start-start-radius: 0;
+        border-end-start-radius: var(--radius-field);
+      }
+      .chat .chat-end .chat-bubble {
+        border-start-end-radius: 0;
+        border-end-end-radius: var(--radius-field);
+      }
+      /* 旁听消息（Agent 之间的横向交流，收发双方都不是当前用户）：
+         整体降透明度，避免刷屏时误以为每条都在找自己；hover 恢复便于细读。 */
+      .message-item.message-bystander { opacity: 0.6; }
+      .message-item.message-bystander:hover { opacity: 1; }
+      /* 同一口径应用到主对话页的 DaisyUI 气泡（.chat）：
+         Agent 之间的横向交流同样弱化，hover 恢复 */
+      .chat.chat-bystander { opacity: 0.6; }
+      .chat.chat-bystander:hover { opacity: 1; }
+      .message-text {
+        display: block;
+        /* 气泡内 markdown 不继承全局 max-w-none，填满气泡宽度正确换行 */
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .message-text .markdown-body { max-width: 100%; }
+      /* 发送者身份：只体现在头像底色（轻量，不用高饱和实底） */
+      .message-item.user .message-avatar {
+        background: color-mix(in oklab, var(--color-primary) 18%, var(--color-base-100));
+        color: var(--color-primary);
+      }
+      .message-item.agent .message-avatar {
+        background: color-mix(in oklab, var(--color-secondary) 18%, var(--color-base-100));
+        color: var(--color-secondary);
+      }
+      .message-item.system .message-avatar {
+        background: color-mix(in oklab, var(--color-info) 18%, var(--color-base-100));
+        color: var(--color-info);
+      }
+
+      /* ===== Soul Prompt ===== */
+      .soul-prompt {
+        white-space: pre-wrap; word-wrap: break-word;
+        margin: 0; font-family: inherit;
+        max-height: 240px; overflow: auto;
+      }
+
+      /* ===== Cron Preset Buttons ===== */
+      .cron-preset-btn {
+        font-size: 11px; padding: 2px 0.5rem;
+        background-color: var(--color-base-200);
+        border: 1px solid var(--color-base-300);
+        border-radius: 0.25rem;
+        cursor: pointer; transition: all 0.15s;
+      }
+      .cron-preset-btn:hover:not(:disabled) {
+        background-color: var(--color-base-300);
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+      }
+      .json-error {
+        margin-top: 0.25rem; padding: 0.25rem 0.5rem;
+        font-size: 12px; color: var(--color-error);
+        background: color-mix(in oklch, var(--color-error) 10%, transparent);
+        border-radius: 0.25rem;
+        border-left: 3px solid var(--color-error);
+      }
+
+      /* ===== Toast 通知（统一 HUD 设计语言） =====
+         玻璃面板 + 语义左侧 accent 边 + 柔和投影；图标用语义色（非白色），
+         关闭按钮为 currentColor 幽灵图标（非白色实心按钮）。
+         结构对齐 .badge.hud-badge / .chat .chat-bubble-system / .tool-card-*：
+         浅玻璃底 + 同色发丝边 + 左侧语义色条。 */
+      .orz-toast {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.625rem;
+        width: 360px;
+        max-width: calc(100vw - 2rem);
+        padding: 0.75rem 0.875rem;
+        border-radius: var(--radius-box, 0.5rem);
+        border: 1px solid color-mix(in oklab, var(--toast-color) 30%, transparent);
+        border-left: 3px solid var(--toast-color);
+        background: color-mix(in oklab, var(--color-base-100) 88%, transparent);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow:
+          0 8px 28px -12px color-mix(in oklab, var(--color-base-content) 45%, transparent),
+          0 0 0 1px color-mix(in oklab, var(--toast-color) 14%, transparent);
+        color: var(--color-base-content);
+        font-family: var(--font-family-sans);
+        font-size: 0.875rem;
+        line-height: 1.5;
+        overflow: hidden;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      .orz-toast .orz-toast-icon {
+        flex: none;
+        width: 1.25rem; height: 1.25rem;
+        display: grid; place-items: center;
+        border-radius: 9999px;
+        font-size: 0.7rem; font-weight: 700; line-height: 1;
+        color: var(--toast-color);
+        background: color-mix(in oklab, var(--toast-color) 14%, transparent);
+        border: 1px solid color-mix(in oklab, var(--toast-color) 30%, transparent);
+      }
+      .orz-toast .orz-toast-msg {
+        flex: 1; min-width: 0;
+        padding-top: 0.0625rem;
+        word-break: break-word;
+      }
+      .orz-toast .orz-toast-close {
+        flex: none;
+        display: grid; place-items: center;
+        width: 1.5rem; height: 1.5rem;
+        margin: -0.125rem -0.25rem 0 0;
+        border: none; background: transparent;
+        border-radius: 9999px;
+        color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+        cursor: pointer; line-height: 1;
+        transition: color 0.15s ease, background 0.15s ease;
+      }
+      .orz-toast .orz-toast-close:hover {
+        color: var(--color-base-content);
+        background: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+      }
+      .orz-toast.is-success { --toast-color: var(--color-success); }
+      .orz-toast.is-error   { --toast-color: var(--color-error); }
+      .orz-toast.is-warning { --toast-color: var(--color-warning); }
+      .orz-toast.is-info    { --toast-color: var(--color-info); }
+
+      .toast-leaving { opacity: 0 !important; transform: translateX(20%); }
+      .toast-progress {
+        position: absolute; bottom: 0; left: 0; height: 2px;
+        background: var(--toast-color); opacity: 0.55;
+        animation-name: toast-progress-shrink;
+        animation-timing-function: linear; animation-fill-mode: forwards;
+      }
+      @keyframes toast-progress-shrink { from { width: 100%; } to { width: 0%; } }
+
+  /* =========================================================================
+   * 未来感 HUD 原语层（Mission-Control）
+   * 切角面板 + 1px 渐变发丝边 + 内网格；等宽数据标签；流光；品牌标记；导航光条。
+   * 全部走 --color-* 语义变量，随 data-theme 自动适配（含 orz-hud 深色）。
+   * 仅作用于新增的 .hud-* 类，不侵入既有 DaisyUI 组件，便于逐页级联。
+   * ========================================================================= */
+
+  /* 品牌标记：六边形渐变 O（导航栏 / 接待页复用） */
+  .brand-mark {
+    width: 26px; height: 26px; display: inline-grid; place-items: center; font-weight: 800;
+    color: #1a1206; border-radius: 5px;
+    background: linear-gradient(90deg, #ffd900 0%, #ffa110 50%, #fa520f 100%);
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+    font-size: 13px; font-family: var(--font-display, 'Chakra Petch', sans-serif);
+  }
+
+  /* 导航栏底部品牌渐变光条（替代原生 shadow-md 的生硬投影） */
+  .orz-navbar { position: relative; }
+  .orz-navbar::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--color-primary) 35%, var(--color-accent) 65%, transparent);
+    opacity: .5;
+  }
+
+  /* 扁平导航链接（替代 btn-ghost 按钮的厚重圆角背景） */
+  .navbar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: color-mix(in oklab, var(--color-neutral-content) 78%, transparent);
+    transition: color 0.15s ease, background-color 0.15s ease;
+    cursor: pointer;
+  }
+  .navbar-link:hover {
+    color: var(--color-neutral-content);
+    background: color-mix(in oklab, var(--color-neutral-content) 8%, transparent);
+  }
+
+  /* 在线状态徽章：暗底 + 绿点微光 */
+  .online-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: color-mix(in oklab, var(--color-success) 10%, transparent);
+    color: var(--color-success);
+    border: 1px solid color-mix(in oklab, var(--color-success) 28%, transparent);
+  }
+  .online-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-success);
+    box-shadow: 0 0 6px 1px color-mix(in oklab, var(--color-success) 70%, transparent);
+  }
+
+  /* 切角 HUD 面板：1px 渐变发丝边 + 切角 + 内网格 */
+  .hud-panel {
+    position: relative;
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-primary) 42%, var(--color-base-300)),
+        var(--color-base-300) 35%,
+        var(--color-base-300) 65%,
+        color-mix(in oklab, var(--color-accent) 32%, var(--color-base-300))) border-box;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    clip-path: polygon(0 11px, 11px 0, calc(100% - 11px) 0, 100% 11px,
+                       100% calc(100% - 11px), calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px));
+  }
+  .hud-panel::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .7;
+    background:
+      linear-gradient(color-mix(in oklab, var(--color-primary) 6%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
+      linear-gradient(90deg, color-mix(in oklab, var(--color-primary) 6%, transparent) 1px, transparent 1px) 0 0 / 22px 22px;
+    -webkit-mask-image: linear-gradient(180deg, rgba(0,0,0,.6), transparent 60%);
+            mask-image: linear-gradient(180deg, rgba(0,0,0,.6), transparent 60%);
+  }
+  .hud-panel > * { position: relative; z-index: 1; }
+
+  /* HudPanel 已用包裹层提供面板内边距；剥离内层 .card-body 的默认 padding，
+     仅保留其 flex-col / gap 排版，避免与面板 padding 叠加造成双重留白。
+     作用域限定为 HudPanel 子包裹层的直接子节点，不影响深层嵌套卡片。 */
+  .hud-panel-body > .card-body { padding: 0; }
+
+  /* ===== HUD 面板分组色调变体 =====
+     用于同一页面内区分语义分组（如工具的神经/绑定/工具包）。
+     ⚠️ 必须用本变体，而不要用 Tailwind 的 `border-primary/30` 之类：
+     `.hud-panel` 的渐变发丝边依赖 `border: 1px solid transparent` + 渐变背景绘制到
+     border-box，直接改 border-color 会把边框变成纯色、盖掉渐变，破坏 HUD 观感。
+     本变体只替换渐变主色，机制与 `.hud-panel` 完全一致。 */
+  .hud-panel.hud-tone-primary {
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-primary) 62%, var(--color-base-300)),
+        var(--color-base-300) 40%, var(--color-base-300) 62%,
+        color-mix(in oklab, var(--color-primary) 38%, var(--color-base-300))) border-box;
+  }
+  .hud-panel.hud-tone-accent {
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-accent) 58%, var(--color-base-300)),
+        var(--color-base-300) 40%, var(--color-base-300) 62%,
+        color-mix(in oklab, var(--color-accent) 34%, var(--color-base-300))) border-box;
+  }
+  .hud-panel.hud-tone-success {
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-success) 58%, var(--color-base-300)),
+        var(--color-base-300) 40%, var(--color-base-300) 62%,
+        color-mix(in oklab, var(--color-success) 34%, var(--color-base-300))) border-box;
+  }
+  .hud-panel.hud-tone-neutral {
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-base-content) 26%, var(--color-base-300)),
+        var(--color-base-300) 40%, var(--color-base-300) 62%,
+        color-mix(in oklab, var(--color-base-content) 14%, var(--color-base-300))) border-box;
+  }
+
+  /* 面板顶部信号流光条 */
+  .hud-signal {
+    height: 2px; border-radius: 2px; overflow: hidden; margin-bottom: .9rem; opacity: .9;
+    background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-accent), transparent);
+    background-size: 200% 100%;
+    animation: hud-signal-flow 3.2s linear infinite;
+  }
+  @keyframes hud-signal-flow { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* ===== 浮层原语 .orz-popover =====
+     SSOT：所有「页面内浮层」的视觉与层叠档 —— 头像信息气泡（AvatarBubble）、
+     @ 提及菜单（.mention-menu）等统一挂它，取代各自硬编码的
+     `rounded-box border-base-300 bg-base-100 shadow-xl`（原生 card 无切角，
+     违反 ui_design_system §8「面板用 DaisyUI 原生 card 无切角」红线）。
+
+     与 .hud-panel 同源（6px 圆角 + 11px 切角 + 1px 渐变发丝边），差异：
+     - 不叠内网格底纹（浮层尺寸小，22px 网格会显脏）
+     - 追加浮起阴影，与页面内容拉开层次
+     - 自带层叠档 z-index: 30 —— **全站浮层唯一档位**（页面内联 z-10 < 浮层 30 < 抽屉 40/50）。
+       navbar 的 5 处下拉同样用它，不必另设高档：`.navbar` 是 `sticky z-50`，
+       **自身即层叠上下文**，内部下拉的 z 档对外表现完全一致
+       （实测 200 与 30 完全相同：与 z-40 抽屉重叠时下拉在上、与 z-50 抽屉重叠时抽屉在上）。
+
+     ⚠️ 本类**不设 position**，定位由使用方给（`.absolute` 工具类 / inline `position:fixed`）。
+     手写裸规则在 `@layer` 之外，优先级高于 Tailwind utilities 层 —— 这里一旦写 `position`，
+     会把使用方的 `.absolute` / `.fixed` 整条盖掉（实测 slash 菜单被压成 `relative`、
+     脱离文档流失败）。
+
+     用法：`.orz-popover` + 定位（absolute / fixed + inset）+ 业务尺寸类（w-/p-）。 */
+  .orz-popover,
+  .mention-menu {
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-primary) 42%, var(--color-base-300)),
+        var(--color-base-300) 35%,
+        var(--color-base-300) 65%,
+        color-mix(in oklab, var(--color-accent) 32%, var(--color-base-300))) border-box;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    clip-path: polygon(0 11px, 11px 0, calc(100% - 11px) 0, 100% 11px,
+                       100% calc(100% - 11px), calc(100% - 11px) 100%, 11px 100%, 0 calc(100% - 11px));
+    box-shadow: 0 12px 28px -10px color-mix(in oklab, var(--color-base-content) 38%, transparent);
+    /* 浮层标准层叠档：见上文说明 */
+    z-index: 30;
+  }
+
+  /* 等宽大写 eyebrow 标签（数据/分区标题） */
+  .hud-eyebrow {
+    font-family: var(--font-family-mono);
+    font-size: 11px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-base-content) 38%, transparent);
+  }
+
+  /* 大号数值读数（tabular-nums） */
+  .hud-stat { font-family: var(--font-display, 'Chakra Petch', sans-serif); font-weight: 700; font-size: 2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .hud-stat .u { font-size: .9rem; color: color-mix(in oklab, var(--color-base-content) 40%, transparent); margin-left: 2px; }
+  /* 紧凑读数：窄容器（聊天侧栏等）用，数字超宽时断行而非溢出 */
+  .hud-stat.hud-stat-sm { font-size: 1.25rem; line-height: 1.2; overflow-wrap: anywhere; }
+  .hud-stat.hud-stat-sm .u { font-size: .75rem; }
+
+  /* 数据条 */
+  .hud-bar { height: 6px; border-radius: 9999px; background: color-mix(in oklab, var(--color-base-content) 10%, transparent); overflow: hidden; }
+  .hud-bar > i { display: block; height: 100%; border-radius: 9999px; background: linear-gradient(90deg, var(--color-primary), var(--color-accent)); }
+  .hud-bar.info > i { background: var(--color-info); }
+  .hud-bar.success > i { background: var(--color-success); }
+
+  /* HUD 进度条：薄轨道 + 发光填充（替代 DaisyUI progress / overview-progress / progress-cell） */
+  .hud-progress { width: 100%; }
+  .hud-progress-track {
+    width: 100%; height: 8px; border-radius: 9999px; overflow: hidden;
+    background: color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  }
+  .hud-progress-fill {
+    height: 100%; border-radius: 9999px; background: var(--color-primary);
+    transition: width .3s ease;
+    box-shadow: 0 0 8px color-mix(in oklab, var(--color-primary) 55%, transparent);
+  }
+  .hud-progress-fill.warning { background: var(--color-warning); box-shadow: 0 0 8px color-mix(in oklab, var(--color-warning) 55%, transparent); }
+  .hud-progress-fill.primary { background: var(--color-primary); box-shadow: 0 0 8px color-mix(in oklab, var(--color-primary) 55%, transparent); }
+  .hud-progress-fill.accent  { background: var(--color-accent);  box-shadow: 0 0 8px color-mix(in oklab, var(--color-accent) 55%, transparent); }
+  .hud-progress-fill.success { background: var(--color-success); box-shadow: 0 0 8px color-mix(in oklab, var(--color-success) 55%, transparent); }
+  .hud-progress-fill.error   { background: var(--color-error);   box-shadow: 0 0 8px color-mix(in oklab, var(--color-error) 55%, transparent); }
+  .hud-progress-fill.info    { background: var(--color-info);    box-shadow: 0 0 8px color-mix(in oklab, var(--color-info) 55%, transparent); }
+  .hud-progress-text {
+    display: inline-block; margin-top: .25rem; font-size: .8rem;
+    font-variant-numeric: tabular-nums; color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+
+  /* ====== HUD 缺失原语皮肤：Divider / Table / Tabs / Modal / Input ====== */
+
+  /* 分割线：两侧发丝线 + 等宽 eyebrow 文本（替代裸 divider） */
+  .hud-divider {
+    display: flex; align-items: center; gap: .75rem; margin: 1.25rem 0;
+    color: color-mix(in oklab, var(--color-base-content) 42%, transparent);
+  }
+  .hud-divider::before, .hud-divider::after {
+    content: ""; height: 1px; flex: 1;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-base-content) 18%, transparent), transparent);
+  }
+  .hud-divider-text {
+    font-family: var(--font-family-mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; white-space: nowrap;
+  }
+
+  /* 提示条：替代裸 alert，统一 HUD 玻璃面板语言（与 .orz-toast / .badge.hud-badge 同源）
+     语义色由组件传入的 text-* 决定（currentColor 驱动边框/底色/文字），无需单独配色类。
+     左侧 3px 语义色条 + 同色发丝边 + 浅玻璃底 + 柔和投影。 */
+  .hud-callout {
+    position: relative;
+    display: flex;
+    gap: .625rem;
+    padding: .75rem 1rem;
+    border-radius: var(--radius-box, .5rem);
+    border: 1px solid color-mix(in oklab, currentColor 28%, transparent);
+    border-left: 3px solid currentColor;
+    background: color-mix(in oklab, currentColor 10%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 6px 20px -14px color-mix(in oklab, var(--color-base-content) 40%, transparent);
+    color: currentColor;
+    font-family: var(--font-family-sans);
+    font-size: .875rem;
+    line-height: 1.5;
+  }
+
+  /* 表格皮肤：覆盖 DaisyUI .table（保留 table 结构），发丝边 + 斑马纹 + 悬停发光 */
+  .hud-table { color: var(--color-base-content); }
+  .hud-table :where(th, td) {
+    border-color: color-mix(in oklab, var(--color-base-content) 12%, transparent);
+    padding: .65rem .9rem;
+  }
+  .hud-table :where(thead th) {
+    font-family: var(--font-family-mono); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+    border-bottom: 1px solid color-mix(in oklab, var(--color-base-content) 22%, transparent);
+  }
+  .hud-table.table-zebra :where(tbody tr:nth-child(even)) {
+    background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+  }
+  .hud-table :where(tbody tr) { transition: background .15s, box-shadow .15s; }
+  .hud-table :where(tbody tr:hover) {
+    background: color-mix(in oklab, var(--color-primary) 8%, transparent);
+    box-shadow: inset 2px 0 0 0 var(--color-primary);
+  }
+
+  /* 弹窗皮肤：覆盖 DaisyUI .modal 背景 + .modal-box（渐变发丝边 + 切角投影） */
+  .hud-modal { background: color-mix(in oklab, var(--color-base-100) 32%, transparent); backdrop-filter: blur(4px); }
+  .hud-modal-box {
+    position: relative;
+    background:
+      linear-gradient(var(--color-base-100), var(--color-base-100)) padding-box,
+      linear-gradient(140deg,
+        color-mix(in oklab, var(--color-primary) 42%, var(--color-base-300)),
+        var(--color-base-300) 35%, var(--color-base-300) 65%,
+        color-mix(in oklab, var(--color-accent) 32%, var(--color-base-300))) border-box;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    box-shadow: 0 24px 64px -24px color-mix(in oklab, var(--color-base-content) 50%, transparent);
+  }
+  .hud-modal-box h3 { font-family: var(--font-display, 'Chakra Petch', sans-serif); }
+
+  /* 全局 modal-box 覆盖：让弹窗默认更宽、垂直可滚动、内容自动换行 */
+  .modal-box {
+    max-width: 95vw !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    overflow-x: clip !important;
+    /* 防止长文本、长命令、长 ID 撑破弹窗宽度 */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .modal-box .font-mono {
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  /* 表单控件皮肤：统一收敛到顶部「静息态主题色发丝边 + 聚焦流动光带」全局规则，
+     .hud-input 不再单独定义（class 保留兼容，视觉与裸 input 一致）。 */
+
+  /* 未来感表格行：左侧数据条 + 悬停发光 */
+  .hud-row {
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; align-items: center; gap: 1rem;
+    padding: .7rem .9rem; border-radius: 6px; border: 1px solid transparent;
+    border-left: 2px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+    transition: background .15s, border-color .15s, box-shadow .15s; cursor: pointer;
+  }
+  .hud-row + .hud-row { margin-top: 2px; }
+  .hud-row:hover {
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+    border-color: var(--color-base-300);
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-primary) 30%, transparent),
+                0 8px 24px -12px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+
+  /* 徽章皮肤：覆盖 DaisyUI .badge（保留语义色，加 HUD 发丝边 + 等宽字体 + 玻璃质感） */
+  /* 度量对齐 .badge.orz-tag：font-weight/letter-spacing/line-height/充足内边距/nowrap，
+     解决中文状态字「贴边、被挤压、字距过紧」的观感问题。 */
+  .badge.hud-badge {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    line-height: 1.4;
+    white-space: nowrap;
+    padding: .25rem .7rem;
+    border-width: 1px;
+    border-radius: 999px;
+    border-color: color-mix(in oklab, currentColor 28%, transparent);
+    backdrop-filter: blur(4px);
+    background-image: linear-gradient(180deg, color-mix(in oklab, #fff 7%, transparent), transparent);
+    box-shadow: inset 0 1px 0 0 color-mix(in oklab, #fff 10%, transparent);
+  }
+  .badge.hud-badge.badge-sm { font-size: 11px; padding: .18rem .62rem; }
+
+  /* HUD 状态语义色：半透明底 + 同色边框/文字，保持玻璃 pill 质感，避免 DaisyUI 默认实心填充 */
+  .badge.hud-badge.badge-success {
+    background-color: color-mix(in oklab, var(--color-success) 14%, transparent);
+    border-color: color-mix(in oklab, var(--color-success) 40%, transparent);
+    color: var(--color-success);
+  }
+  .badge.hud-badge.badge-error {
+    background-color: color-mix(in oklab, var(--color-error) 14%, transparent);
+    border-color: color-mix(in oklab, var(--color-error) 40%, transparent);
+    color: var(--color-error);
+  }
+  .badge.hud-badge.badge-warning {
+    background-color: color-mix(in oklab, var(--color-warning) 14%, transparent);
+    border-color: color-mix(in oklab, var(--color-warning) 40%, transparent);
+    color: var(--color-warning);
+  }
+  .badge.hud-badge.badge-info {
+    background-color: color-mix(in oklab, var(--color-info) 14%, transparent);
+    border-color: color-mix(in oklab, var(--color-info) 40%, transparent);
+    color: var(--color-info);
+  }
+  .badge.hud-badge.badge-primary {
+    background-color: color-mix(in oklab, var(--color-primary) 14%, transparent);
+    border-color: color-mix(in oklab, var(--color-primary) 40%, transparent);
+    color: var(--color-primary);
+  }
+  .badge.hud-badge.badge-neutral {
+    background-color: color-mix(in oklab, var(--color-neutral) 14%, transparent);
+    border-color: color-mix(in oklab, var(--color-neutral) 40%, transparent);
+    color: var(--color-neutral-content);
+  }
+  .badge.hud-badge.badge-ghost {
+    background-color: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    border-color: color-mix(in oklab, var(--color-base-content) 22%, transparent);
+    color: var(--color-base-content);
+  }
+
+  /* 按钮皮肤：覆盖 DaisyUI .btn（保留语义色，加 HUD 发丝边 + 聚焦辉光 + 微过渡） */
+  .btn.hud-btn {
+    border-width: 1px;
+    border-color: color-mix(in oklab, currentColor 28%, transparent);
+    backdrop-filter: blur(4px);
+    transition: filter .15s, box-shadow .15s, border-color .15s, background-color .15s;
+    box-shadow: inset 0 1px 0 0 color-mix(in oklab, #fff 8%, transparent);
+  }
+  .btn.hud-btn:hover { filter: brightness(1.06); }
+  .btn.hud-btn.btn-primary {
+    box-shadow: 0 0 14px -4px color-mix(in oklab, var(--color-primary) 55%, transparent),
+                inset 0 1px 0 0 color-mix(in oklab, #fff 14%, transparent);
+  }
+  .btn.hud-btn:focus-visible {
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+
+  /* ===== HUD 开关（Toggle Switch） =====
+     对齐 .hud-btn / .hud-badge / .hud-callout 的玻璃 + 发丝边语言：
+     pill 轨道（border-radius:9999px，与 hud-badge / online-badge 一致）+ 1px 发丝边
+     + 半透明底；关闭态用 base-content 玻璃灰，开启态用品牌 primary 玻璃色 + 同色发丝边
+     + 柔光投影；thumb 为白圆点带轻投影。状态由 .is-on 控制，禁用态降透明度并禁指针。
+     全部走 --color-* 语义变量，随 data-theme（含 orz-hud 深色）自动适配。 */
+  .hud-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    width: 44px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent);
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--color-base-content) 12%, transparent);
+    cursor: pointer;
+    transition: background-color .2s ease, border-color .2s ease, box-shadow .2s ease;
+  }
+  .hud-switch .hud-switch-thumb {
+    position: absolute;
+    left: 3px;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    margin-top: -9px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    transition: transform .2s ease;
+    transform: translateX(0);
+  }
+  .hud-switch.is-on {
+    background: color-mix(in oklab, var(--color-primary) 22%, transparent);
+    border-color: color-mix(in oklab, var(--color-primary) 50%, transparent);
+    box-shadow: 0 0 10px -2px color-mix(in oklab, var(--color-primary) 55%, transparent);
+  }
+  .hud-switch.is-on .hud-switch-thumb { transform: translateX(20px); }
+  .hud-switch:disabled { cursor: not-allowed; opacity: .55; }
+  .hud-switch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+
+  /* ===== Scrollbar (optional, minimal) ===== */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+  /* ===== HUD 分段控件（Segmented Control） =====
+     与 .hud-btn / .hud-switch / .hud-badge 同一套玻璃 + 发丝边语言：
+     pill 轨道（9999px 圆角）+ 半透明底 + 1px 发丝边；选中项用品牌 primary
+     玻璃填充 + 同色发丝边 + 柔光投影。用于时间区间预设等少量互斥选项。
+     颜色全部走 --color-* 语义变量，随 data-theme（含 orz-hud 深色）自适应。 */
+  .hud-seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 14%, transparent);
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+    backdrop-filter: blur(4px);
+  }
+  .hud-seg-item {
+    padding: .28rem .7rem;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
+    color: color-mix(in oklab, var(--color-base-content) 62%, transparent);
+    background: transparent;
+    cursor: pointer;
+    transition: color .15s, background-color .15s, border-color .15s, box-shadow .15s;
+  }
+  .hud-seg-item:hover {
+    color: var(--color-base-content);
+    background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+  }
+  .hud-seg-item.is-active {
+    color: var(--color-primary-content);
+    background: color-mix(in oklab, var(--color-primary) 82%, transparent);
+    border-color: color-mix(in oklab, var(--color-primary) 55%, transparent);
+    box-shadow: 0 0 12px -4px color-mix(in oklab, var(--color-primary) 65%, transparent);
+  }
+  .hud-seg-item:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+  .hud-seg-item-sm { padding: .16rem .5rem; font-size: 11px; }
+
+  /* ===== 项目内 Agent 列表（ProjectAgentsTab，聊天侧栏项目模式 Agent Tab） =====
+     上下两段布局（AMan 拍板 2026-09-24）：上半 = 40px 头像 + 名称加粗横排
+     + 标签区铺右（状态/负责人/角色全保留）；下半 = 左侧介绍两行截断（hover
+     原生 tooltip 看全文）+ 右侧任务数按钮恒在（两块完整切分，不受左侧文本
+     截断影响），点按钮展开/收起行底编号任务列表；Agent 行之间以 base-content
+     20% 细分隔线区分（旧 10% 偏淡，AMan 反馈后加深）。
+     hover = base-content 6%，选中 = primary 10% + inset 2px 左数据条。
+     键盘可达：focus-visible 用 2px primary 描边替换浏览器默认聚焦白边
+     （对齐 .hud-seg-item:focus-visible 口径）。 */
+  .project-agent-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color .15s, box-shadow .15s;
+  }
+  /* 相邻行细分隔线 + 间隔感（AMan 反馈：旧 10% 偏淡看不清，加深至 20%） */
+  .project-agent-item + .project-agent-item {
+    border-top: 1px solid color-mix(in oklab, var(--color-base-content) 20%, transparent);
+  }
+  /* 首行：头像 + 名称横排，徽标区铺行尾右对齐 */
+  .project-agent-item-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .project-agent-item:hover {
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+  }
+  .project-agent-item.is-selected {
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    box-shadow: inset 2px 0 0 0 var(--color-primary);
+  }
+  .project-agent-item:focus-visible {
+    outline: none;
+    box-shadow: inset 2px 0 0 0 var(--color-primary),
+                0 0 0 2px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+  /* 行尾徽标区：负责人 / 运行时状态 / 角色标签，≤3 枚 nowrap，超出截断不换行 */
+  .project-agent-item-badges {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  /* 下半部分（AMan 拍板 2026-09-24）：左侧介绍两行截断（hover 看全文）+
+     右侧任务数按钮恒在，两块完整切分；按钮配色全部复用本区块已有档位
+     （边框 10% / 底 4% / hover 6% / 聚焦 primary 40%），零新增设计令牌 */
+  .project-agent-item-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .project-agent-item-desc {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+  .project-agent-item-tasks-btn {
+    appearance: none;
+    flex-shrink: 0;
+    white-space: nowrap;
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    background: color-mix(in oklab, var(--color-base-content) 4%, transparent);
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color .15s, border-color .15s;
+  }
+  .project-agent-item-tasks-btn:hover {
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+  }
+  .project-agent-item-tasks-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+  /* 展开区：任务数按钮展开的任务列表（「1. 2. 3.」十进制编号） */
+  .project-agent-item-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.25rem;
+    background: color-mix(in oklab, var(--color-base-content) 4%, transparent);
+  }
+  .project-agent-item-tasks {
+    list-style: decimal;
+    padding-left: 1.25rem;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+  }
+  .project-agent-item-tasks li {
+    overflow-wrap: anywhere;
+  }
