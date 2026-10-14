@@ -1,0 +1,4 @@
+-- 【占位文件 · 骨架】表结构 schema + 预置分类 seed
+-- 归属执行单①（MCP + 业务层 + schema 落码）：按架构设计方案 v1.0 §3 落位
+--   （transactions / categories / accounts / tags / transaction_tags / budgets + 预置分类 seed）
+-- 本文件当前为零业务内容的骨架占位（任务 01a138a2 仓库初始化）。

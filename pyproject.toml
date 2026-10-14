@@ -1,0 +1,11 @@
+[project]
+name = "ledger"
+version = "0.1.0"
+description = "DuckDB MCP 个人流水账服务（MCP + FastAPI 双入口 · 单业务层 · 单数据文件）"
+requires-python = ">=3.10"
+# 依赖由执行单①落码时启用（架构设计方案 v1.0 §6 选型，勿在本骨架阶段提前写入）：
+#   mcp（官方 SDK，FastMCP 工具面）/ fastapi / uvicorn（UI 后端）/ duckdb / pydantic
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

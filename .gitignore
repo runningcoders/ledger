@@ -1,0 +1,30 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- frontend（Node）----
+node_modules/
+frontend/dist/
+
+# ---- 构建产物（Vite build 输出 → ledger/ui/，可重建不入库）----
+ledger/ui/*
+!ledger/ui/.gitkeep
+
+# ---- 隐私红线兜底：DuckDB 明细数据库文件严禁入库（原始流水只存本地，不入 git）----
+*.duckdb
+*.duckdb.wal
+*.wal
+
+# ---- 环境变量 ----
+.env
+.env.*
+
+# ---- OS ----
+.DS_Store
