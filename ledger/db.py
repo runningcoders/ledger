@@ -5,7 +5,7 @@
 - 撞锁重试：open_with_retry 重试 5 次、退避 0.2s 递增（总窗口约 3s），
   远大于对端写锁窗口；重试耗尽返回明确业务错误（db_busy）。
 - 数据文件：每用户独立库 ~/.ai_orz/data/users/{uid}/personal/ledger.duckdb
-  （env LEDGER_DB_PATH 显式配置优先；uid 取自结构化 base64 凭证 env LEDGER_USER_ID，
+  （env LEDGER_DB_PATH 显式配置优先；uid 取自结构化 base64 凭证 env LEDGER_CREDENTIAL，
   双入口启动 fail-fast 校验；无旧路径回退分支——多用户拍板①，AMan 01a13e2c）；
   单文件 + WAL；隐私红线：原始明细只落本地文件，不入平台库不入蜂巢图谱。
 - 首启建库：_ensure_schema 执行仓库根 schema.sql（IF NOT EXISTS 幂等），
@@ -38,7 +38,7 @@ _schema_ready = False
 _schema_lock = threading.Lock()
 
 # ── 多用户凭证（结构化 base64，AMan 拍板②，01a13e2c）────────────────────────
-# 编码链：JSON（UTF-8 紧凑）→ 标准 base64（RFC 4648）→ env LEDGER_USER_ID 单行字符串。
+# 编码链：JSON（UTF-8 紧凑）→ 标准 base64（RFC 4648）→ env LEDGER_CREDENTIAL 单行字符串。
 # 不做旧格式嗅探兼容（拍板②-2）：旧格式由下方校验链结构性拒绝。
 CREDENTIAL_VERSION = 1
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -54,7 +54,7 @@ class CredentialError(Exception):
 
 
 def parse_credential(raw: str | None) -> str:
-    """解析 LEDGER_USER_ID 原始值，返回 user_id。
+    """解析 LEDGER_CREDENTIAL 原始值，返回 user_id。
 
     六步校验链（任一步失败抛 CredentialError，不猜不降级，拍板②-3）：
     env 非空 → base64 严格解码（validate=True，字符集外即拒）→ UTF-8 → JSON 对象
@@ -66,12 +66,12 @@ def parse_credential(raw: str | None) -> str:
     username 可选本期零消费；未知字段一律忽略（预留拓展位，向前兼容）。
     """
     if not raw:
-        raise CredentialError("env_missing", "环境变量 LEDGER_USER_ID 未设置或为空")
+        raise CredentialError("env_missing", "环境变量 LEDGER_CREDENTIAL 未设置或为空")
     try:
         decoded = base64.b64decode(raw, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise CredentialError(
-            "base64_invalid", f"LEDGER_USER_ID 不是合法 base64：{exc}"
+            "base64_invalid", f"LEDGER_CREDENTIAL 不是合法 base64：{exc}"
         ) from exc
     try:
         text = decoded.decode("utf-8")
@@ -104,12 +104,12 @@ _resolved_user_id: str | None = None
 
 
 def bootstrap_credential() -> str:
-    """启动装配：读 env LEDGER_USER_ID → parse_credential → 存模块级缓存供 db_path() 消费。
+    """启动装配：读 env LEDGER_CREDENTIAL → parse_credential → 存模块级缓存供 db_path() 消费。
 
     双入口（MCP stdio / REST serve）在 main() 最前调用，零豁免（拍板②-3）。
     """
     global _resolved_user_id
-    user_id = parse_credential(os.environ.get("LEDGER_USER_ID"))
+    user_id = parse_credential(os.environ.get("LEDGER_CREDENTIAL"))
     _resolved_user_id = user_id
     return user_id
 

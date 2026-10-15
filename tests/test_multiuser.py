@@ -31,9 +31,9 @@ def _cred(user_id: str = "TESTUSER0000000001A", v: int = 1, **extra) -> str:
 
 @pytest.fixture(autouse=True)
 def _isolated_credential_state(monkeypatch):
-    """每用例隔离：重置凭证缓存、清 LEDGER_USER_ID，杜绝用例间污染与真实 env 泄入。"""
+    """每用例隔离：重置凭证缓存、清 LEDGER_CREDENTIAL，杜绝用例间污染与真实 env 泄入。"""
     monkeypatch.setattr(db, "_resolved_user_id", None)
-    monkeypatch.delenv("LEDGER_USER_ID", raising=False)
+    monkeypatch.delenv("LEDGER_CREDENTIAL", raising=False)
     yield
 
 
@@ -167,7 +167,7 @@ def test_main_fail_fast_exit_2_missing_env(tmp_path):
 
 
 def test_main_fail_fast_exit_2_legacy_uid(tmp_path):
-    proc = _run_entry({"LEDGER_USER_ID": "LEGACYRAWUID0001"}, tmp_path)
+    proc = _run_entry({"LEDGER_CREDENTIAL": "LEGACYRAWUID0001"}, tmp_path)
     assert proc.returncode == 2
     assert "credential_error" in proc.stderr
     assert "json_invalid" in proc.stderr
@@ -175,6 +175,6 @@ def test_main_fail_fast_exit_2_legacy_uid(tmp_path):
 
 def test_main_fail_fast_exit_2_invalid_json(tmp_path):
     bad = base64.b64encode(b"not-json").decode("ascii")
-    proc = _run_entry({"LEDGER_USER_ID": bad}, tmp_path)
+    proc = _run_entry({"LEDGER_CREDENTIAL": bad}, tmp_path)
     assert proc.returncode == 2
     assert "json_invalid" in proc.stderr
