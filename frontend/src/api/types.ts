@@ -1113,6 +1113,9 @@ export interface operations {
                 end: string;
                 group_by?: string;
                 direction?: string | null;
+                category_id?: string | null;
+                account_id?: string | null;
+                tag?: string[] | null;
             };
             header?: never;
             path?: never;

@@ -13,14 +13,36 @@ export type TxnCreate = Schemas['TransactionCreate']
 export type TxnUpdate = Schemas['TransactionUpdate']
 export type Overview = Schemas['OverviewOut']
 export type Account = Schemas['AccountOut']
+export type AccountCreate = Schemas['AccountCreate']
+export type AccountUpdate = Schemas['AccountUpdate']
 export type Category = Schemas['CategoryOut']
+export type CategoryCreate = Schemas['CategoryCreate']
+export type CategoryUpdate = Schemas['CategoryUpdate']
 export type Tag = Schemas['TagOut']
+export type TagRenameRequest = Schemas['TagRenameRequest']
 export type StatsSummary = Schemas['GroupStat']
+export type GroupStat = Schemas['GroupStat']
 export type StatsOut = Schemas['StatsOut']
+export type StatsQuery = NonNullable<
+  operations['stats_summary_endpoint_api_v1_stats_summary_get']['parameters']['query']
+>
+export type BudgetLine = Schemas['BudgetLine']
+export type BudgetStatusOut = Schemas['BudgetStatusOut']
+export type BudgetSetRequest = Schemas['BudgetSetRequest']
+export type BudgetSetItem = Schemas['BudgetSetItem']
 
 export type ListQuery = NonNullable<
   operations['list_transactions_endpoint_api_v1_transactions_get']['parameters']['query']
 >
+
+/** 统计页/账户页 → 流水页预置筛选动线（UI 规范 §5.1 点击扇区/日历、§5.3 点击账户卡） */
+export interface LedgerPreset {
+  categoryId?: string
+  accountId?: string
+  /** 'YYYY-MM-DD'（日历格单日跳转） */
+  start?: string
+  end?: string
+}
 
 /** 后端 Base URL：生产态由后端同源托管（空串=同源），开发态走 vite proxy */
 const BASE = ''
@@ -36,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-function qs(params: Partial<ListQuery>): string {
+function qs(params: object): string {
   const sp = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null || v === '') continue
@@ -50,6 +72,14 @@ function qs(params: Partial<ListQuery>): string {
   return s ? `?${s}` : ''
 }
 
+function jsonInit(method: string, payload: unknown): RequestInit {
+  return {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }
+}
+
 export const api = {
   health: () => request<{ status: string }>('/api/health'),
 
@@ -59,18 +89,10 @@ export const api = {
   getTxn: (id: string) => request<Txn>(`/api/v1/transactions/${id}`),
 
   createTxn: (payload: TxnCreate) =>
-    request<Txn>('/api/v1/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
+    request<Txn>('/api/v1/transactions', jsonInit('POST', payload)),
 
   updateTxn: (id: string, payload: TxnUpdate) =>
-    request<Txn>(`/api/v1/transactions/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }),
+    request<Txn>(`/api/v1/transactions/${id}`, jsonInit('PATCH', payload)),
 
   voidTxn: (id: string) =>
     request<Txn>(`/api/v1/transactions/${id}/void`, { method: 'POST' }),
@@ -80,14 +102,46 @@ export const api = {
 
   listAccounts: () => request<Account[]>('/api/v1/accounts'),
 
+  createAccount: (payload: AccountCreate) =>
+    request<Account>('/api/v1/accounts', jsonInit('POST', payload)),
+
+  updateAccount: (id: string, payload: AccountUpdate) =>
+    request<Account>(`/api/v1/accounts/${id}`, jsonInit('PATCH', payload)),
+
   listCategories: (enabledOnly = false) =>
     request<Category[]>(`/api/v1/categories${enabledOnly ? '?enabled_only=true' : ''}`),
 
+  createCategory: (payload: CategoryCreate) =>
+    request<Category>('/api/v1/categories', jsonInit('POST', payload)),
+
+  updateCategory: (id: string, payload: CategoryUpdate) =>
+    request<Category>(`/api/v1/categories/${id}`, jsonInit('PATCH', payload)),
+
   listTags: () => request<Tag[]>('/api/v1/tags'),
 
-  /** 按日粒度统计（B2 当日收支小计口径源：排除转账/不计收支/作废，与概览同口径） */
-  dailyStats: (start: string, end: string) =>
+  renameTag: (id: string, payload: TagRenameRequest) =>
+    request<Tag>(`/api/v1/tags/${id}`, jsonInit('PATCH', payload)),
+
+  /** 预算状态（R7 三态；period 缺省本月；总预算行 category_id=null 在前） */
+  budgetStatus: (period?: string) =>
+    request<BudgetStatusOut>(`/api/v1/budgets${period ? `?period=${period}` : ''}`),
+
+  /** 设定预算（PUT 整体替换该期全部行） */
+  setBudgets: (payload: BudgetSetRequest) =>
+    request<BudgetStatusOut>('/api/v1/budgets', jsonInit('PUT', payload)),
+
+  /** 通用统计聚合（P1：stats/summary 含分类/账户/标签筛选维度，聚合全走后端） */
+  statsSummary: (params: Partial<StatsQuery>) =>
+    request<StatsOut>(`/api/v1/stats/summary${qs(params)}`),
+
+  /** 按日粒度统计（B2 当日收支小计口径源：排除转账/不计收支/作废，与概览同口径）；
+   *  P1 精确口径：可透传分类/账户筛选（后端扩展参数，分组∈GROUP BY 与筛选∈WHERE 正交） */
+  dailyStats: (
+    start: string,
+    end: string,
+    filters?: { category_id?: string; account_id?: string },
+  ) =>
     request<StatsOut>(
-      `/api/v1/stats/summary?start=${start}&end=${end}&group_by=day`,
+      `/api/v1/stats/summary${qs({ start, end, group_by: 'day', ...filters })}`,
     ),
 }

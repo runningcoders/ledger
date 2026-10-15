@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ListQuery, StatsSummary, Txn, TxnCreate, TxnUpdate } from '../api/model'
+import type {
+  LedgerPreset,
+  ListQuery,
+  StatsSummary,
+  Txn,
+  TxnCreate,
+  TxnUpdate,
+} from '../api/model'
 import { api } from '../api/model'
-import { currentMonth, useLedgerData } from '../useLedgerData'
+import { currentMonth } from '../useLedgerData'
+import type { LedgerData } from '../useLedgerData'
 import { dayKey, groupTitle, hhmm } from '../lib/datetime'
 import { amountColorClass, amountSign, kindOf, thousands } from '../lib/format'
 import TransactionForm from '../components/TransactionForm'
@@ -51,8 +59,25 @@ interface DayGroup {
   items: Txn[]
 }
 
-export default function LedgerPage() {
-  const { data, loading, error, reload } = useLedgerData()
+interface Props {
+  /** 全局基础数据（App 状态提升统一拉取，跨页共享） */
+  data: LedgerData
+  loading: boolean
+  error: string | null
+  reload: () => void
+  /** 统计页/账户页跳转预置筛选（一次性消费） */
+  preset: LedgerPreset | null
+  onPresetConsumed: () => void
+}
+
+export default function LedgerPage({
+  data,
+  loading,
+  error,
+  reload,
+  preset,
+  onPresetConsumed,
+}: Props) {
   const { accounts, categories, tags } = data
   const overview = data.overview
 
@@ -82,6 +107,19 @@ export default function LedgerPage() {
     setToast({ kind, text })
     window.setTimeout(() => setToast(null), 2500)
   }
+
+  // 统计页扇区/日历格、账户页账户卡跳转 → 预置筛选一次性消费（UI 规范 §5 动线）
+  useEffect(() => {
+    if (!preset) return
+    setFilters((f) => ({
+      ...f,
+      categoryId: preset.categoryId ?? f.categoryId,
+      accountId: preset.accountId ?? f.accountId,
+      start: preset.start ?? f.start,
+      end: preset.end ?? f.end,
+    }))
+    onPresetConsumed()
+  }, [preset, onPresetConsumed])
 
   const queryParams = useMemo(() => {
     const q: Partial<ListQuery> = {}
@@ -125,7 +163,8 @@ export default function LedgerPage() {
     }
   }, [queryParams, offset, listTick])
 
-  // 当日小计随列表窗口取数（后端 stats 接口无分类/账户筛选参数，小计=当日全量收支口径，列待议）
+  // 当日小计随列表窗口取数（P1 精确口径：按筛选条件过滤的当日收支小计，
+  // stats/summary 已扩展 category_id/account_id 筛选参数——后端单 01a13cfb 落地）
   useEffect(() => {
     if (items.length === 0) return
     const days = items.map((t) => dayKey(t.occurred_at)).filter((d) => d !== '')
@@ -133,7 +172,10 @@ export default function LedgerPage() {
     const sorted = [...days].sort()
     let alive = true
     api
-      .dailyStats(`${sorted[0]} 00:00:00`, `${sorted[sorted.length - 1]} 23:59:59`)
+      .dailyStats(`${sorted[0]} 00:00:00`, `${sorted[sorted.length - 1]} 23:59:59`, {
+        ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
+        ...(filters.accountId ? { account_id: filters.accountId } : {}),
+      })
       .then((out) => {
         if (!alive) return
         setDayStats(new Map(out.items.map((s) => [s.key ?? '', s])))
@@ -145,7 +187,7 @@ export default function LedgerPage() {
     return () => {
       alive = false
     }
-  }, [items])
+  }, [items, filters])
 
   // —— 按日分组（B2：分组头带当日收支小计）——
   const groups: DayGroup[] = useMemo(() => {
@@ -174,11 +216,6 @@ export default function LedgerPage() {
     filters.includeVoided
 
   // —— 动作 ——
-  const openCreate = () => {
-    setEditing(null)
-    setFormOpen(true)
-  }
-
   const openEdit = (t: Txn) => {
     setDetail(null)
     setEditing(t)
@@ -262,19 +299,8 @@ export default function LedgerPage() {
   const setF = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }))
 
   return (
-    <div className="min-h-screen bg-base-200">
-      <div className="mx-auto max-w-5xl px-4 py-6 grid gap-4">
-        {/* 顶栏 */}
-        <header className="flex items-center justify-between gap-3">
-          <h1 className="font-display text-xl font-semibold">个人流水账</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-xs opacity-60">本地服务 127.0.0.1:8723</span>
-            <button className="btn btn-primary" onClick={openCreate}>
-              记一笔
-            </button>
-          </div>
-        </header>
-
+    <>
+      <div className="grid gap-4">
         {/* U2 概览三卡（A1：三卡横排，语义色，tabular-nums；A3 状态齐备） */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {loading ? (
@@ -603,6 +629,6 @@ export default function LedgerPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
