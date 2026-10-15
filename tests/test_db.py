@@ -34,9 +34,16 @@ def test_second_connect_idempotent_no_duplicate_seed():
         assert rows == 2  # 支出/收入各一个「其他」
 
 
-def test_db_path_default_and_env(monkeypatch, tmp_path):
+def test_db_path_explicit_env_precedence_and_requires_credential(monkeypatch, tmp_path):
+    """路径两级规则（多用户拍板①，无旧路径回退分支）：
+
+    显式配置优先；无显式配置且凭证缓存未装配 = 编程错误 RuntimeError。
+    按用户派生路径详见 test_multiuser.py。
+    """
     monkeypatch.delenv("LEDGER_DB_PATH", raising=False)
-    assert db.db_path() == db._DEFAULT_DB_PATH
+    monkeypatch.setattr(db, "_resolved_user_id", None)
+    with pytest.raises(RuntimeError):
+        db.db_path()
     monkeypatch.setenv("LEDGER_DB_PATH", str(tmp_path / "x.duckdb"))
     assert db.db_path() == tmp_path / "x.duckdb"
 
