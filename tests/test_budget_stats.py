@@ -195,3 +195,176 @@ def test_summary_group_by_day_and_account_and_tag(fixed_account):
 def test_summary_invalid_group_by():
     with pytest.raises(LedgerError):
         stats.summary(start="2026-09-01", end="2026-09-30", group_by="hack")
+
+
+# ---------- 统计筛选扩展（P1：分类/账户/标签筛选维度）----------
+
+def test_summary_filter_by_category_includes_children(fixed_account):
+    """category_id 筛选含全部子分类（R6 两级封顶），金额按筛选口径汇总。"""
+    acct = fixed_account
+    from ledger.models import CategoryCreate
+    from ledger.services import categories
+    child = categories.create_category(
+        CategoryCreate(name="打车", parent_id=EXP2, direction="expense"))
+    tx.create(TransactionCreate(type="expense", amount="20.00", category_id=EXP2,
+                                account_id=acct.id, occurred_at="2026-06-02T12:00:00"))
+    tx.create(TransactionCreate(type="expense", amount="25.00", category_id=child.id,
+                                account_id=acct.id, occurred_at="2026-06-03T12:00:00"))
+    tx.create(TransactionCreate(type="expense", amount="10.00", category_id=EXP,
+                                account_id=acct.id, occurred_at="2026-06-04T12:00:00"))
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="category", category_id=EXP2)
+    groups = {i.name: i for i in out.items}   # 分组按流水自身分类：父级+子级各自成组
+    assert set(groups) == {"交通", "打车"}
+    assert str(groups["交通"].expense) == "20.00"
+    assert str(groups["打车"].expense) == "25.00"
+    out_day = stats.summary(start="2026-06-01", end="2026-06-30",
+                            group_by="day", category_id=EXP2)
+    days = {i.key: str(i.expense) for i in out_day.items}
+    assert days == {"2026-06-02": "20.00", "2026-06-03": "25.00"}  # 父级子树两日均入，按天小计
+
+
+def test_summary_filter_category_no_match_returns_empty(fixed_account):
+    """筛选后无匹配项=合法空集（items=[]），非错误。"""
+    tx.create(TransactionCreate(type="expense", amount="10.00", category_id=EXP,
+                                account_id=fixed_account.id,
+                                occurred_at="2026-06-02T12:00:00"))
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="day", category_id="cat_nope")
+    assert out.items == []
+
+
+def test_summary_filter_by_account_only_hits_own_side(fixed_account):
+    """account_id 筛选仅命中流水自身账户（收支流水只挂单侧；他户流水不混入）。"""
+    acct = fixed_account
+    other = _acct("统计筛选另一卡")
+    tx.create(TransactionCreate(type="expense", amount="15.00", category_id=EXP,
+                                account_id=acct.id, occurred_at="2026-06-02T12:00:00"))
+    tx.create(TransactionCreate(type="expense", amount="30.00", category_id=EXP,
+                                account_id=other.id, occurred_at="2026-06-03T12:00:00"))
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="account", account_id=acct.id)
+    assert [i.key for i in out.items] == [acct.id]
+    assert str(out.items[0].expense) == "15.00"
+
+
+def test_summary_filter_account_preserves_r3_r4_r5(fixed_account):
+    """筛选与既定口径叠加：作废排除（R5）、转账不计收支（R3）、不计收支项排除（R4）。"""
+    acct = fixed_account
+    tx.create(TransactionCreate(type="expense", amount="40.00", category_id=EXP,
+                                account_id=acct.id, occurred_at="2026-06-02T12:00:00"))
+    t_void = tx.create(TransactionCreate(type="expense", amount="200.00",
+                                         category_id=EXP2, account_id=acct.id,
+                                         occurred_at="2026-06-03T12:00:00"))
+    tx.void(t_void.id)
+    tx.create(TransactionCreate(type="transfer", category_id=None, amount="60.00",
+                                account_id=acct.id,
+                                counter_account_id=_acct("转出卡3").id,
+                                occurred_at="2026-06-04T12:00:00"))  # R3：不进收支
+    tx.create(TransactionCreate(type="expense", amount="70.00", category_id=EXP2,
+                                account_id=acct.id, in_sum=False,
+                                occurred_at="2026-06-05T12:00:00"))  # R4：不进收支
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="account", account_id=acct.id)
+    assert [i.key for i in out.items] == [acct.id]
+    assert str(out.items[0].expense) == "40.00"
+    assert str(out.items[0].income) == "0.00"
+    out_no_filter = stats.summary(start="2026-06-01", end="2026-06-30",
+                                  group_by="account")
+    assert str(next(i for i in out_no_filter.items
+                    if i.key == acct.id).expense) == "40.00"  # 口径与筛选一致
+
+
+def test_summary_filter_by_tag_or_semantics(fixed_account):
+    """tag 多值 OR 语义（与查流水一致），可与 direction 组合。"""
+    acct = fixed_account
+    tx.create(TransactionCreate(type="expense", amount="10.00", category_id=EXP,
+                                account_id=acct.id, tags=["出差"],
+                                occurred_at="2026-06-02T12:00:00"))
+    tx.create(TransactionCreate(type="expense", amount="15.00", category_id=EXP2,
+                                account_id=acct.id, tags=["通勤"],
+                                occurred_at="2026-06-03T12:00:00"))
+    tx.create(TransactionCreate(type="income", amount="100.00", category_id=INC,
+                                account_id=acct.id, tags=["报销"],
+                                occurred_at="2026-06-04T12:00:00"))
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="category", tag=["出差", "通勤"])
+    assert {i.name: str(i.expense) for i in out.items} == {
+        "餐饮": "10.00", "交通": "15.00"}
+    out_income = stats.summary(start="2026-06-01", end="2026-06-30",
+                               group_by="category", tag=["报销"],
+                               direction="income")
+    assert [i.name for i in out_income.items] == ["工资"]
+    assert str(out_income.items[0].income) == "100.00"
+
+
+def test_summary_filter_whitespace_only_tag_equals_no_filter(fixed_account):
+    """tag 全空串入参（strip 后无有效名）等同未传，不产生空 IN 空集。"""
+    acct = fixed_account
+    tx.create(TransactionCreate(type="expense", amount="10.00", category_id=EXP,
+                                account_id=acct.id, occurred_at="2026-06-02T12:00:00"))
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="category", tag=["  ", ""])
+    assert [i.name for i in out.items] == ["餐饮"]
+    assert str(out.items[0].expense) == "10.00"
+
+
+def test_summary_filter_category_no_match_on_day_group(fixed_account):
+    """day 维度同样受筛选约束（全部日期组被筛掉时 items=[]）。"""
+    acct = fixed_account
+    tx.create(TransactionCreate(type="expense", amount="10.00", category_id=EXP,
+                                account_id=acct.id, occurred_at="2026-06-02T12:00:00"))
+    out = stats.summary(start="2026-06-01", end="2026-06-30",
+                        group_by="day", category_id=EXP2)
+    assert out.items == []
+
+
+def test_stats_summary_rest_endpoint_filters():
+    """REST 面筛选参数端到端：参数生效+响应契约形态不变+既有调用面零破坏。"""
+    from fastapi.testclient import TestClient
+
+    from ledger.api import create_app
+    from ledger.models import AccountCreate, CategoryCreate, TransactionCreate
+    from ledger.services import accounts, categories, transactions as tx
+
+    client = TestClient(create_app())
+    acct = accounts.create_account(
+        AccountCreate(name="REST统计账户", type="cash", initial_balance="0"))
+    child = categories.create_category(
+        CategoryCreate(name="打车", parent_id=EXP2, direction="expense"))
+    tx.create(TransactionCreate(type="expense", amount="25.00", category_id=child.id,
+                                account_id=acct.id, occurred_at="2026-06-02T12:00:00"))
+    tx.create(TransactionCreate(type="expense", amount="10.00", category_id=EXP,
+                                account_id=acct.id, occurred_at="2026-06-03T12:00:00"))
+
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-06-01", "end": "2026-06-30", "group_by": "category",
+        "category_id": EXP2})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["group_by"] == "category"
+    by_key = {i["key"]: i["expense"] for i in body["items"]}
+    assert by_key == {child.id: "25.00"}  # 仅子树命中（10.00 系餐饮非交通）；金额=字符串两位小数
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-06-01", "end": "2026-06-30", "group_by": "day",
+        "category_id": EXP2})
+    assert r.status_code == 200 and len(r.json()["items"]) == 1
+    assert r.json()["items"][0]["expense"] == "25.00"   # day 小计受筛选约束
+
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-06-01", "end": "2026-06-30", "group_by": "day",
+        "category_id": "cat_nope"})
+    assert r.status_code == 200 and r.json()["items"] == []
+
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-06-01", "end": "2026-06-30", "group_by": "category",
+        "tag": ["  ", ""]})
+    assert r.status_code == 200
+    assert [i["name"] for i in r.json()["items"]] == ["打车", "餐饮"]  # 全量两根（按合计降序）
+
+    # 向后兼容：不带筛选参数的既有调用面（start/end/group_by/direction）照常工作
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-06-01", "end": "2026-06-30"})
+    assert r.status_code == 200
+    items = {i["name"]: i["expense"] for i in r.json()["items"]}
+    assert items == {"打车": "25.00", "餐饮": "10.00"}

@@ -40,10 +40,23 @@ def overview(month: str | None = None) -> OverviewOut:
 
 
 def summary(*, start, end, group_by: str = "category",
-            direction: str | None = None) -> StatsOut:
+            direction: str | None = None,
+            category_id: str | None = None,
+            account_id: str | None = None,
+            tag: list[str] | None = None) -> StatsOut:
     """区间分组统计（M5/U3 数据源）：group_by=category/account/tag/day/month。
 
     tag 维度：一笔多标签会计入多个分组（横切维度语义，如实呈现）。
+
+    筛选维度（P1 扩展，可选；不传即沿用既有口径，向后兼容）：
+    - category_id：筛选含全部子分类（R6 两级封顶：一层子级即完整子树），
+      语义与查流水（list_transactions）一致——父级与其子级的流水均纳入；
+      分组仍按流水自身分类呈现（父子不折叠，与不过滤时同口径，
+      跨级合计由 day/month 维度小计或前端树聚合承载）。
+    - account_id：仅命中流水 account_id 字段（收支流水只挂单侧账户；
+      转账双侧不进收支口径已被 R3 排除，无需对侧命中）。
+    - tag：标签名多值 OR 语义（与查流水一致）；全空串入参等同未传。
+    筛选后无匹配项是合法结果（items=[]，空集非错误）。
     """
     if group_by not in {"category", "account", "tag", "day", "month"}:
         raise LedgerError("invalid_group_by",
@@ -55,6 +68,26 @@ def summary(*, start, end, group_by: str = "category",
     if direction in ("income", "expense"):
         where += " AND t.type = ?"
         args.append(direction)
+
+    # ---- 筛选维度（与查流水同构的组合式追加）----
+    filters: list[str] = []
+    if category_id is not None:
+        filters.append("(t.category_id = ? OR t.category_id IN"
+                       " (SELECT id FROM categories WHERE parent_id = ?))")
+        args.extend([category_id, category_id])
+    if account_id is not None:
+        filters.append("t.account_id = ?")
+        args.append(account_id)
+    if tag:
+        names = [t.strip() for t in tag if t and t.strip()]
+        if names:
+            ph = ", ".join("?" for _ in names)
+            filters.append("EXISTS (SELECT 1 FROM transaction_tags tt"
+                           " JOIN tags tg ON tg.id = tt.tag_id"
+                           f" WHERE tt.transaction_id = t.id AND tg.name IN ({ph}))")
+            args.extend(names)
+    if filters:
+        where += " AND " + " AND ".join(filters)
 
     if group_by == "category":
         joins = "JOIN categories c ON c.id = t.category_id"

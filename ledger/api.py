@@ -172,9 +172,13 @@ def create_app() -> FastAPI:
         group_by: str = Query(default="category",
                               pattern="^(category|account|tag|day|month)$"),
         direction: Optional[str] = Query(default=None, pattern="^(income|expense)$"),
+        category_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+        tag: Optional[list[str]] = Query(default=None),
     ) -> StatsOut:
         return stats_svc.summary(start=start, end=end, group_by=group_by,
-                                 direction=direction)
+                                 direction=direction, category_id=category_id,
+                                 account_id=account_id, tag=tag)
 
     # ---- 静态托管 React 构建产物（构建生成不入手编；存在才挂载）----
     ui_dir = Path(__file__).resolve().parent / "ui"
