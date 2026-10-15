@@ -297,3 +297,73 @@ def test_void_tagged_join_rows_restored_without_duplication():
     assert n == 1
     got = tx.get(out.id)
     assert [t.name for t in got.tags] == ["旅行"]
+
+
+# ---------- 标签重命名·被引用（rename_tag 子表外键回归） ----------
+
+def test_rename_referenced_tag_succeeds_and_links_preserved():
+    """被交易引用的标签可重命名（DuckDB 父行 UPDATE 对尚存子行 FK 敏感的回归）；
+    重命名后原关联零丢失、联接零重复（PK 自证）。"""
+    from ledger.db import connect
+    from ledger.services import tags as tag_svc
+    out = _create(tags=["餐饮补贴"])
+    with connect() as conn:
+        tid = conn.execute("SELECT id FROM tags WHERE name = '餐饮补贴'").fetchone()[0]
+    renamed = tag_svc.rename_tag(tid, "餐饮补贴改")
+    assert renamed.id == tid and renamed.name == "餐饮补贴改"
+    got = tx.get(out.id)
+    assert [t.name for t in got.tags] == ["餐饮补贴改"]   # 关联零丢失
+    with connect() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM transaction_tags WHERE tag_id = ?", [tid]).fetchone()[0]
+        assert conn.execute(
+            "SELECT name FROM tags WHERE id = ?", [tid]).fetchone()[0] == "餐饮补贴改"
+    assert n == 1   # 零重复 PK 自证
+
+
+def test_rename_referenced_tag_shared_by_two_transactions():
+    """同一标签被多笔交易引用时重命名：双关联零丢失零重复。"""
+    from ledger.db import connect
+    from ledger.services import tags as tag_svc
+    t1 = _create(tags=["通勤"])
+    t2 = _create(tags=["通勤"])
+    with connect() as conn:
+        tid = conn.execute("SELECT id FROM tags WHERE name = '通勤'").fetchone()[0]
+        n0 = conn.execute(
+            "SELECT COUNT(*) FROM transaction_tags WHERE tag_id = ?", [tid]).fetchone()[0]
+    assert n0 == 2
+    tag_svc.rename_tag(tid, "通勤改名")
+    assert [t.name for t in tx.get(t1.id).tags] == ["通勤改名"]
+    assert [t.name for t in tx.get(t2.id).tags] == ["通勤改名"]
+    with connect() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM transaction_tags WHERE tag_id = ?", [tid]).fetchone()[0]
+    assert n == 2   # 双关联保全且零重复
+
+
+def test_rename_unreferenced_tag_no_regression():
+    """零引用（孤儿）标签重命名不回归。"""
+    from ledger.db import connect
+    from ledger.services import tags as tag_svc
+    out = _create(tags=["旧标签"])
+    tx.update(out.id, TransactionUpdate(tags=[]))   # 摘除成孤儿
+    with connect() as conn:
+        tid = conn.execute("SELECT id FROM tags WHERE name = '旧标签'").fetchone()[0]
+    renamed = tag_svc.rename_tag(tid, "新标签")
+    assert renamed.name == "新标签"
+    assert tx.get(out.id).tags == []
+
+
+def test_rename_tag_not_found_and_name_taken():
+    """404/409 语义不变：重名检查先于任何写路径，冲突时原标签状态零扰动。"""
+    from ledger.db import connect
+    from ledger.services import tags as tag_svc
+    with pytest.raises(NotFoundError):
+        tag_svc.rename_tag("no-such-tag", "随便")
+    a = _create(tags=["标签A"])
+    _create(tags=["标签B"])
+    with connect() as conn:
+        ta = conn.execute("SELECT id FROM tags WHERE name = '标签A'").fetchone()[0]
+    with pytest.raises(ConflictError):
+        tag_svc.rename_tag(ta, "标签B")
+    assert [t.name for t in tx.get(a.id).tags] == ["标签A"]   # 冲突时零扰动
