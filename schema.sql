@@ -93,3 +93,10 @@ INSERT INTO categories (id, name, parent_id, direction, enabled, is_preset, sort
   ('cat_inc_04','红包', NULL,'income',TRUE,TRUE,4),
   ('cat_inc_05','其他', NULL,'income',TRUE,TRUE,5)
 ON CONFLICT DO NOTHING;
+
+-- ============ 默认账户 seed（账户机制改造·AMan 拍板案 B，任务 01a14375）============
+-- 幂等 seed（ON CONFLICT DO NOTHING，与分类 seed 同构）；默认账户「现金」type=cash；
+-- 固定 id=acc_default_cash：M1 缺省兜底 + services.accounts.ensure_default_account 既有库补种锚点。
+INSERT INTO accounts (id, name, type, currency, initial_balance) VALUES
+  ('acc_default_cash', '现金', 'cash', 'CNY', 0)
+ON CONFLICT DO NOTHING;
