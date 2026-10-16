@@ -23,16 +23,16 @@ def _out(row) -> CategoryOut:
                        enabled=row[4], is_preset=row[5], sort=row[6])
 
 
-def list_categories() -> list[CategoryOut]:
-    with connect() as conn:
+def list_categories(uid: str | None = None) -> list[CategoryOut]:
+    with connect(uid) as conn:
         rows = conn.execute(
             f"SELECT {_COLS} FROM categories ORDER BY direction, sort, name"
         ).fetchall()
     return [_out(r) for r in rows]
 
 
-def create_category(params: CategoryCreate) -> CategoryOut:
-    with connect() as conn:
+def create_category(params: CategoryCreate, uid: str | None = None) -> CategoryOut:
+    with connect(uid) as conn:
         direction = params.direction
         if params.parent_id:
             prow = conn.execute(
@@ -67,10 +67,10 @@ def create_category(params: CategoryCreate) -> CategoryOut:
         return _out(row)
 
 
-def update_category(cid: str, params: CategoryUpdate) -> CategoryOut:
+def update_category(cid: str, params: CategoryUpdate, uid: str | None = None) -> CategoryOut:
     """可改项：名称/启停/排序；direction 创建后不可改（存量流水口径一致性）。
     预置集允许停用（R6：停用≠删除），本服务不提供删除。"""
-    with connect() as conn:
+    with connect(uid) as conn:
         row = conn.execute(
             "SELECT parent_id FROM categories WHERE id = ?", [cid]).fetchone()
         if row is None:

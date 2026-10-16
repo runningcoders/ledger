@@ -21,13 +21,13 @@ _BASE_WHERE = ("t.status = 'active' AND t.in_sum = TRUE"
                " AND t.occurred_at >= ? AND t.occurred_at < ?")
 
 
-def overview(month: str | None = None) -> OverviewOut:
+def overview(month: str | None = None, uid: str | None = None) -> OverviewOut:
     """本月收支概览（U2）：income/expense/balance 三读数。"""
     month = month or datetime.now().strftime("%Y-%m")
     if not _PERIOD_RE.match(month):
         raise LedgerError("invalid_period", "周期格式须为 YYYY-MM")
     start, end = _month_bounds(month)
-    with connect() as conn:
+    with connect(uid) as conn:
         row = conn.execute(
             "SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount END), 0),"
             " COALESCE(SUM(CASE WHEN type = 'expense' THEN amount END), 0)"
@@ -43,7 +43,8 @@ def summary(*, start, end, group_by: str = "category",
             direction: str | None = None,
             category_id: str | None = None,
             account_id: str | None = None,
-            tag: list[str] | None = None) -> StatsOut:
+            tag: list[str] | None = None,
+            uid: str | None = None) -> StatsOut:
     """区间分组统计（M5/U3 数据源）：group_by=category/account/tag/day/month。
 
     tag 维度：一笔多标签会计入多个分组（横切维度语义，如实呈现）。
@@ -104,7 +105,7 @@ def summary(*, start, end, group_by: str = "category",
         joins = ""
         key_expr = name_expr = group_expr = f"strftime(t.occurred_at, '{fmt}')"
 
-    with connect() as conn:
+    with connect(uid) as conn:
         rows = conn.execute(
             f"SELECT {key_expr}, {name_expr},"
             " COALESCE(SUM(CASE WHEN t.type = 'income' THEN t.amount END), 0) AS income,"

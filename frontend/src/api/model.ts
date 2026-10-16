@@ -47,8 +47,65 @@ export interface LedgerPreset {
 /** 后端 Base URL：生产态由后端同源托管（空串=同源），开发态走 vite proxy */
 const BASE = ''
 
+// ── 总管模式：写凭证与用户切换（评估报告 01a14009 评估面 c/d，AMan 拍板②③④按推荐）──
+// 凭证态：内存 + sessionStorage（会话级，浏览器关闭即清；不落 localStorage 明文）。
+// 写请求由 request() 单点自动注入 X-Ledger-Credential 头（全部写调用点零逐改）；
+// 读请求由 request() 单点自动拼接 uid 查询参数（activeUid 非空时；单用户模式恒空=零影响）。
+const CRED_KEY = 'ledger_write_credential'
+let credential: string | null = null
+try {
+  credential = sessionStorage.getItem(CRED_KEY)
+} catch {
+  credential = null // sessionStorage 不可用（隐私模式等）则仅内存态
+}
+let activeUid: string | null = null
+
+export function getCredential(): string | null {
+  return credential
+}
+
+export function setCredential(value: string): void {
+  credential = value
+  try {
+    sessionStorage.setItem(CRED_KEY, value)
+  } catch {
+    /* 会话存储不可用则仅内存态 */
+  }
+}
+
+export function clearCredential(): void {
+  credential = null
+  try {
+    sessionStorage.removeItem(CRED_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function setActiveUid(uid: string | null): void {
+  activeUid = uid
+}
+
+function withUid(path: string): string {
+  if (!activeUid) return path
+  return `${path}${path.includes('?') ? '&' : '?'}uid=${encodeURIComponent(activeUid)}`
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init)
+  const method = init?.method ?? 'GET'
+  const headers = new Headers(init?.headers)
+  const isWrite = method !== 'GET' && method !== 'HEAD'
+  if (isWrite && credential) headers.set('X-Ledger-Credential', credential)
+  const res = await fetch(`${BASE}${isWrite ? path : withUid(path)}`, { ...init, headers })
+  if (res.status === 401) {
+    // 评估面 c：失败不静默——清凭证态 + 事件通知顶栏重弹「解锁写入」
+    clearCredential()
+    window.dispatchEvent(new CustomEvent('ledger:credential-required'))
+    const body = (await res.json().catch(() => null)) as
+      | { error?: { message?: string } }
+      | null
+    throw new Error(body?.error?.message ?? '需要写凭证（HTTP 401）')
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
       | { error?: { message?: string } }
@@ -81,7 +138,13 @@ function jsonInit(method: string, payload: unknown): RequestInit {
 }
 
 export const api = {
-  health: () => request<{ status: string }>('/api/health'),
+  health: () =>
+    request<{ status: string; mode: 'single' | 'manager'; user: string | null }>(
+      '/api/health',
+    ),
+
+  /** 已注册用户清单（总管模式切换器数据源；单用户模式恒空=切换器不渲染） */
+  getUsers: () => request<{ items: string[] }>('/api/v1/users'),
 
   listTxns: (params: Partial<ListQuery>) =>
     request<TxnList>(`/api/v1/transactions${qs(params)}`),

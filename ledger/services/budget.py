@@ -34,7 +34,7 @@ def _month_bounds(period: str) -> tuple[datetime, datetime]:
     return start, end
 
 
-def set_budgets(req: BudgetSetRequest) -> BudgetStatusOut:
+def set_budgets(req: BudgetSetRequest, uid: str | None = None) -> BudgetStatusOut:
     _check_period(req.period)
     cat_ids = [i.category_id for i in req.items]
     if cat_ids.count(None) > 1:
@@ -46,7 +46,7 @@ def set_budgets(req: BudgetSetRequest) -> BudgetStatusOut:
         if cid in seen:
             raise ConflictError("budget_category_duplicate", "同一分类预算重复")
         seen.add(cid)
-    with connect() as conn:
+    with connect(uid) as conn:
         for cid in seen:
             if conn.execute("SELECT 1 FROM categories WHERE id = ?", [cid]).fetchone() is None:
                 raise NotFoundError("category_not_found", f"分类不存在：{cid}")
@@ -62,15 +62,15 @@ def set_budgets(req: BudgetSetRequest) -> BudgetStatusOut:
         except Exception:
             conn.execute("ROLLBACK")
             raise
-    return budget_status(req.period)
+    return budget_status(req.period, uid=uid)
 
 
-def budget_status(period: str | None = None) -> BudgetStatusOut:
+def budget_status(period: str | None = None, uid: str | None = None) -> BudgetStatusOut:
     period = period or datetime.now().strftime("%Y-%m")
     _check_period(period)
     start, end = _month_bounds(period)
     lines: list[BudgetLine] = []
-    with connect() as conn:
+    with connect(uid) as conn:
         rows = conn.execute(
             "SELECT b.category_id, b.amount, c.name FROM budgets b"
             " LEFT JOIN categories c ON c.id = b.category_id"

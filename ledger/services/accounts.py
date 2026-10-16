@@ -43,8 +43,8 @@ def _out(conn, aid: str) -> AccountOut:
                       initial_balance=row[4], enabled=row[5], balance=row[6])
 
 
-def list_accounts() -> list[AccountOut]:
-    with connect() as conn:
+def list_accounts(uid: str | None = None) -> list[AccountOut]:
+    with connect(uid) as conn:
         rows = conn.execute(
             f"SELECT a.id, a.name, a.type, a.currency, a.initial_balance, a.enabled,"
             f" {_BALANCE_SQL} AS balance"
@@ -58,8 +58,8 @@ def list_accounts() -> list[AccountOut]:
                        initial_balance=r[4], enabled=r[5], balance=r[6]) for r in rows]
 
 
-def create_account(params: AccountCreate) -> AccountOut:
-    with connect() as conn:
+def create_account(params: AccountCreate, uid: str | None = None) -> AccountOut:
+    with connect(uid) as conn:
         aid = str(uuid.uuid4())
         try:
             conn.execute(
@@ -72,9 +72,9 @@ def create_account(params: AccountCreate) -> AccountOut:
         return _out(conn, aid)
 
 
-def update_account(aid: str, params: AccountUpdate) -> AccountOut:
+def update_account(aid: str, params: AccountUpdate, uid: str | None = None) -> AccountOut:
     """可改项克制：名称与启停（销户语义复杂化，P0/P1 无删除动作）。"""
-    with connect() as conn:
+    with connect(uid) as conn:
         if conn.execute("SELECT 1 FROM accounts WHERE id = ?", [aid]).fetchone() is None:
             raise NotFoundError("account_not_found", f"账户不存在：{aid}")
         sets, args = [], []

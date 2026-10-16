@@ -9,8 +9,11 @@ export interface LedgerData {
   tags: Tag[]
 }
 
-/** 全局基础数据：概览 + 账户 + 分类 + 标签（reload 供增删改后刷新） */
-export function useLedgerData(): {
+/** 全局基础数据：概览 + 账户 + 分类 + 标签（reload 供增删改后刷新）。
+
+    uid：总管模式用户切换（切换即整组重取）；单用户模式恒 null（零影响）。
+    读请求经 request() 单点自动拼 uid——本 hook 只负责依赖触发。 */
+export function useLedgerData(uid: string | null = null): {
   data: LedgerData
   loading: boolean
   error: string | null
@@ -51,7 +54,7 @@ export function useLedgerData(): {
     return () => {
       alive = false
     }
-  }, [tick])
+  }, [tick, uid])
 
   return { data, loading, error, reload }
 }

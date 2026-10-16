@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Users */
+        get: operations["list_users_api_v1_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/transactions": {
         parameters: {
             query?: never;
@@ -608,6 +625,28 @@ export interface operations {
             };
         };
     };
+    list_users_api_v1_users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     list_transactions_endpoint_api_v1_transactions_get: {
         parameters: {
             query?: {
@@ -623,6 +662,7 @@ export interface operations {
                 include_voided?: boolean;
                 limit?: number;
                 offset?: number;
+                uid?: string | null;
             };
             header?: never;
             path?: never;
@@ -653,7 +693,9 @@ export interface operations {
     create_transaction_api_v1_transactions_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -685,7 +727,9 @@ export interface operations {
     };
     get_transaction_endpoint_api_v1_transactions__txn_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                uid?: string | null;
+            };
             header?: never;
             path: {
                 txn_id: string;
@@ -717,7 +761,9 @@ export interface operations {
     update_transaction_endpoint_api_v1_transactions__txn_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path: {
                 txn_id: string;
             };
@@ -752,7 +798,9 @@ export interface operations {
     void_transaction_endpoint_api_v1_transactions__txn_id__void_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path: {
                 txn_id: string;
             };
@@ -784,6 +832,7 @@ export interface operations {
         parameters: {
             query?: {
                 month?: string | null;
+                uid?: string | null;
             };
             header?: never;
             path?: never;
@@ -813,7 +862,9 @@ export interface operations {
     };
     list_accounts_endpoint_api_v1_accounts_get: {
         parameters: {
-            query?: never;
+            query?: {
+                uid?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -829,12 +880,23 @@ export interface operations {
                     "application/json": components["schemas"]["AccountOut"][];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     create_account_endpoint_api_v1_accounts_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -867,7 +929,9 @@ export interface operations {
     update_account_endpoint_api_v1_accounts__account_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path: {
                 account_id: string;
             };
@@ -901,7 +965,9 @@ export interface operations {
     };
     list_categories_endpoint_api_v1_categories_get: {
         parameters: {
-            query?: never;
+            query?: {
+                uid?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -917,12 +983,23 @@ export interface operations {
                     "application/json": components["schemas"]["CategoryOut"][];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     create_category_endpoint_api_v1_categories_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -955,7 +1032,9 @@ export interface operations {
     update_category_endpoint_api_v1_categories__category_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path: {
                 category_id: string;
             };
@@ -989,7 +1068,9 @@ export interface operations {
     };
     list_tags_endpoint_api_v1_tags_get: {
         parameters: {
-            query?: never;
+            query?: {
+                uid?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1005,12 +1086,23 @@ export interface operations {
                     "application/json": components["schemas"]["TagOut"][];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     rename_tag_endpoint_api_v1_tags__tag_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path: {
                 tag_id: string;
             };
@@ -1046,6 +1138,7 @@ export interface operations {
         parameters: {
             query?: {
                 period?: string | null;
+                uid?: string | null;
             };
             header?: never;
             path?: never;
@@ -1076,7 +1169,9 @@ export interface operations {
     set_budgets_endpoint_api_v1_budgets_put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Ledger-Credential"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1116,6 +1211,7 @@ export interface operations {
                 category_id?: string | null;
                 account_id?: string | null;
                 tag?: string[] | null;
+                uid?: string | null;
             };
             header?: never;
             path?: never;

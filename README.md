@@ -89,10 +89,22 @@ uv run --directory <仓库绝对路径> python -m ledger
 
 # 本地 UI 服务（REST + React 静态托管，仅绑定回环 127.0.0.1:8723）
 uv run --directory <仓库绝对路径> python -m ledger serve
-scripts/serve_ui.sh      # 等价封装：校验 LEDGER_CREDENTIAL 已设后启动
+scripts/serve_ui.sh      # 等价封装：凭证已设=单用户模式启动 / 未设=总管模式启动
 ```
 
-地址与端口：`LEDGER_HOST`（默认 `127.0.0.1`）/ `LEDGER_PORT`（默认 `8723`）env 可配；**默认只绑定回环地址**，不对外网暴露。`LEDGER_CREDENTIAL` 未设或非法 → 两入口同样 fail-fast 退出（exit 2）。
+地址与端口：`LEDGER_HOST`（默认 `127.0.0.1`）/ `LEDGER_PORT`（默认 `8723`）env 可配；**默认只绑定回环地址**，不对外网暴露。
+
+**入口分流（serve 特有）**：MCP 入口恒要求凭证（未设/非法 → fail-fast exit 2，零豁免）；serve 入口按 `LEDGER_CREDENTIAL` 分流——**已设=单用户模式**（现行为不变，非法凭证同样 fail-fast）；**未设=总管只读模式**（见下节）。
+
+## 总管只读模式（serve 入口 · LEDGER_CREDENTIAL 未设）
+
+本机多用户总管形态：无凭证启动 = 只读平台，读端点聚合返回**全部已注册用户**数据；写操作需请求级凭证解锁。
+
+- **已注册用户判定锚**：`~/.ai_orz/data/users/<uid>/personal/ledger.duckdb` 文件存在（uid 白名单 `^[A-Za-z0-9_-]+$`）；发现过程只读零副作用（不建目录不建库）。
+- **读端点**：`uid` 查询参数可选——不传=聚合全部已注册用户（空集=空聚合非报错；损坏库自动跳过 stderr 留痕）；传 uid=锁定单用户库（非法/不存在 uid=404）。单用户模式下 uid 参数被忽略（向后兼容）。
+- **写端点（恰 9 个）**：要求请求头 `X-Ledger-Credential: <结构化 base64 凭证串>`（与 env 同构，六步校验链复用；**不经 URL** 防访问日志泄漏）；缺失/无效 = HTTP 401；写目标一律由凭证解析（贴他人凭证写不进别人的库——目标库强校验兜底）。前端顶栏「解锁写入」弹窗粘贴即可（凭证仅驻会话，浏览器关闭即清）。
+- **健康检查**：`/api/health` 返回 `mode`（single/manager）与 `user`；`/api/v1/users` 返回已注册 uid 清单（单用户模式恒空）。
+- **安全口径**：无凭证读全量 = 本机可访问该服务者均可读全部账本（风险等价文件系统读权限）；默认回环绑定 + 非回环启动警示 + 凭证走请求头 + 不建令牌门（AMan 拍板⑤采认）；局域网暴露场景请自担配置责任。
 
 ## MCP 工具契约（8 件，FastMCP 注册于 ledger/mcp_server.py）
 
@@ -144,7 +156,8 @@ health `/api/health`；transactions（POST/GET/PATCH/void）；overview；accoun
 - REST 面默认绑定 `127.0.0.1` 回环，不对外网暴露；`LEDGER_HOST`/`LEDGER_PORT` 仅本机自担配置责任。
 - 凭证仅 env 单行传递（MCP stdio 注入子进程 env / 本机 shell export）；平台侧经 MCP 凭证机制加密存储；凭证串等价于用户身份，零明文示例零日志零入库。
 - 原始流水明细只落本地 DuckDB 文件（.gitignore 已兜底），不进任何远端。
-- MCP/REST 双入口启动 fail-fast 零豁免：无凭证不启动、坏凭证不降级。
+- MCP 入口启动 fail-fast 零豁免：无凭证不启动、坏凭证不降级；serve 入口分流（凭证已设=单用户 fail-fast / 未设=总管只读放行）。
+- 总管模式：无凭证读全量风险已如实知悉（AMan 拍板⑤）；缓解=回环绑定默认+非回环警示+写凭证请求头通道+不建令牌门。
 
 ## 目录结构与代码落位表
 

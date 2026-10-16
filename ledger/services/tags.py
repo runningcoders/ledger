@@ -7,13 +7,13 @@ from ..errors import ConflictError, NotFoundError
 from ..models import TagOut
 
 
-def list_tags() -> list[TagOut]:
-    with connect() as conn:
+def list_tags(uid: str | None = None) -> list[TagOut]:
+    with connect(uid) as conn:
         rows = conn.execute("SELECT id, name FROM tags ORDER BY name").fetchall()
     return [TagOut(id=r[0], name=r[1]) for r in rows]
 
 
-def rename_tag(tag_id: str, name: str) -> TagOut:
+def rename_tag(tag_id: str, name: str, uid: str | None = None) -> TagOut:
     """重命名标签。
 
     DuckDB 1.5.6 父表 UPDATE 的 FK 检查对尚存子行敏感（同 update()/void() 先例：
@@ -23,7 +23,7 @@ def rename_tag(tag_id: str, name: str) -> TagOut:
     （transaction_tags 复合 PK 自证零重复）。重名/存在性检查先于任何写路径，
     冲突时原状态零扰动。
     """
-    with connect() as conn:
+    with connect(uid) as conn:
         if conn.execute("SELECT 1 FROM tags WHERE id = ?", [tag_id]).fetchone() is None:
             raise NotFoundError("tag_not_found", f"标签不存在：{tag_id}")
         if conn.execute(

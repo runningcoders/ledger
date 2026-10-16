@@ -25,6 +25,17 @@ BudgetStatus = Literal["normal", "near_limit", "over"]
 _PERIOD_RE = re.compile(r"^\d{4}-\d{2}$")
 
 
+class UserScoped(BaseModel):
+    """读端点可选用户切换（总管模式评估面 d，AMan 拍板②按推荐）。
+
+    uid=None：单用户模式=本库（现行为）；总管模式=聚合全部已注册用户。
+    uid=显式：总管模式锁定单库；单用户模式忽略（向后兼容零破坏）。
+    写端点不加 uid（写目标一律由请求级凭证解析，防贴他人凭证错写）。
+    """
+
+    uid: Optional[str] = None
+
+
 class TransactionCreate(BaseModel):
     """记一笔（M1）：R1 必填约束在服务层按类型细化（转账无分类、需对方账户）。"""
 

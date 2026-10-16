@@ -122,8 +122,8 @@ def _tag_ids(conn, names: Iterable[str]) -> list[str]:
     return ids
 
 
-def create(params: TransactionCreate) -> TransactionOut:
-    with connect() as conn:
+def create(params: TransactionCreate, uid: str | None = None) -> TransactionOut:
+    with connect(uid) as conn:
         _validate(conn, txn_type=params.type, category_id=params.category_id,
                   account_id=params.account_id,
                   counter_account_id=params.counter_account_id, check_enabled=True)
@@ -149,8 +149,8 @@ def create(params: TransactionCreate) -> TransactionOut:
         return _to_out(conn, row)
 
 
-def get(txid: str) -> TransactionOut:
-    with connect() as conn:
+def get(txid: str, uid: str | None = None) -> TransactionOut:
+    with connect(uid) as conn:
         row = conn.execute(
             f"SELECT {_TXN_COLS} FROM transactions WHERE id = ?", [txid]
         ).fetchone()
@@ -159,9 +159,9 @@ def get(txid: str) -> TransactionOut:
         return _to_out(conn, row)
 
 
-def update(txid: str, params: TransactionUpdate) -> TransactionOut:
+def update(txid: str, params: TransactionUpdate, uid: str | None = None) -> TransactionOut:
     """修改=直接覆盖更新（UI 规范 §3.4 口径）；合并终态后按 R1-R4 重校验。"""
-    with connect() as conn:
+    with connect(uid) as conn:
         row = conn.execute(
             f"SELECT {_TXN_COLS} FROM transactions WHERE id = ?", [txid]
         ).fetchone()
@@ -214,7 +214,7 @@ def update(txid: str, params: TransactionUpdate) -> TransactionOut:
         return _to_out(conn, row)
 
 
-def void(txid: str) -> TransactionOut:
+def void(txid: str, uid: str | None = None) -> TransactionOut:
     """作废（R5）：status 翻转，不物理删除；重复作废报 409。
 
     DuckDB 父表 UPDATE 的 FK 检查对尚存子行敏感（同 update() 先例：子表清理
@@ -223,7 +223,7 @@ def void(txid: str) -> TransactionOut:
     先例一致：显式事务内先删后改仍触发 FK 违规（父行 FK 检查不读同事务内
     未提交的删除），故不另起显式事务。
     """
-    with connect() as conn:
+    with connect(uid) as conn:
         row = conn.execute(
             "SELECT status FROM transactions WHERE id = ?", [txid]).fetchone()
         if row is None:
@@ -253,7 +253,8 @@ def list_transactions(*, start=None, end=None, txn_type: Optional[str] = None,
                       category_id: Optional[str] = None, account_id: Optional[str] = None,
                       tag=None, keyword: Optional[str] = None,
                       min_amount=None, max_amount=None, include_voided: bool = False,
-                      limit: int = 50, offset: int = 0) -> TransactionListOut:
+                      limit: int = 50, offset: int = 0,
+                      uid: str | None = None) -> TransactionListOut:
     """查流水（M3）：组合筛选 + 时间倒序分页；category 含子分类、account 含转账双侧、
     tag 多值 OR 语义、keyword 匹配备注+分类名。"""
     where: list[str] = []
@@ -302,7 +303,7 @@ def list_transactions(*, start=None, end=None, txn_type: Optional[str] = None,
         where.append("t.status = 'active'")
 
     sql_where = (" WHERE " + " AND ".join(where)) if where else ""
-    with connect() as conn:
+    with connect(uid) as conn:
         total = conn.execute(
             f"SELECT COUNT(*) FROM transactions t{sql_where}", args).fetchone()[0]
         rows = conn.execute(
