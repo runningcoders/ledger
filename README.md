@@ -1,110 +1,186 @@
 # ledger — DuckDB MCP 个人流水账服务
 
-个人本地记账应用：**MCP server + 本地 Web UI 双入口 · 单业务层 · 单数据文件**。Agent 经 ai orz 平台 MCP 底座记账问答，人经浏览器 `http://127.0.0.1:8723` 查账管账，两条入口共享同一业务层与同一本地 DuckDB 文件，业务口径永不漂移。
+个人本地记账应用：**MCP server + 本地 Web UI 双入口 · 单业务层 · 单数据文件**。
+Agent 经 ai orz 平台 MCP 底座记账问答，人经浏览器 `http://127.0.0.1:8723` 查账管账，
+两条入口共享同一业务层与同一本地 DuckDB 数据文件，业务口径永不漂移。
 
-- **项目**：DuckDB MCP 个人流水账服务自研（B 档）
-- **权威设计**：《记账应用前后端架构设计与技术栈选型 v1.0》（artifact 01a13856，平台项目 01a1362a）——本 README 是其 §4 模块划分的落位执行版；业务规则以设计稿/调研报告为准，本文件只管「代码往哪里写」。
-- **技术栈**：Python 3.10+（官方 MCP SDK FastMCP + FastAPI + duckdb + pydantic，uv 托管工具链）+ React（Vite + TS + Tailwind v4 + DaisyUI v5 + recharts）。
+- **项目**：DuckDB MCP 个人流水账服务自研（B 档），平台项目 01a1362a
+- **技术栈**：Python 3.10+（官方 MCP SDK FastMCP + FastAPI + duckdb + pydantic，uv 托管工具链）+ React（Vite + TS + Tailwind v4 + DaisyUI v5 + recharts）
+- **错误契约**：REST 侧 HTTP 状态码 + `{error:{code,message}}`；MCP 侧 `isError` 语义，同一 message 文案源 `ledger/errors.py`
+- **隐私红线**：原始流水明细只存本地 `.duckdb`，不进 git、不落平台库、不入任何上报/日志/示例；文档与测试示例一律脱敏虚构（本 README 所有示例均为占位符）
 
 ---
+
+## 快速开始（5 步）
+
+```bash
+# 1) 安装依赖
+scripts/setup_env.sh
+
+# 2) 构造 LEDGER_CREDENTIAL 凭证（输出一行 base64 串，复制 export）
+LEDGER_USER_ID=<你的UID> scripts/make_credential.sh
+
+# 3) MCP stdio 冒烟（验证凭证+握手+8 工具清单；恒用临时库，零触碰真实账本）
+scripts/smoke_mcp_stdio.sh
+
+# 4) 启动本地 UI（默认 http://127.0.0.1:8723，回环绑定）
+export LEDGER_CREDENTIAL='<第 2 步输出整行>'
+scripts/serve_ui.sh
+
+# 5) 接入 ai orz 平台（管理员操作）：凭证页录 platform=ledger 通用凭证（generic_token，
+#    值=第 2 步凭证串）；MCP 服务器页注册 Stdio server：
+#    command=<uv 绝对路径>，args=["run","--directory","<仓库绝对路径>","python","-m","ledger"]，
+#    并在 credential_requirements 声明 env 绑定名 LEDGER_CREDENTIAL。
+```
+
+## 环境准备与依赖安装
+
+```bash
+# 推荐 uv（官方 Python 工具链管理器）
+curl -LsSf https://astral.sh/uv/install.sh | sh   # 或 brew install uv
+scripts/setup_env.sh    # = uv sync + 依赖自检（mcp/fastapi/duckdb/pydantic import 验证）
+```
+
+依赖清单（`pyproject.toml`）：`mcp>=1.2.0,<2.0.0`（官方 SDK FastMCP 面）/ `fastapi` / `uvicorn` / `duckdb` / `pydantic`；dev 组 `pytest` / `httpx`。
+
+## LEDGER_CREDENTIAL 凭证配置
+
+**格式**：结构化 JSON 的标准 base64 编码单行串（RFC 4648；`v=1` 当前唯一支持版本）：
+
+```json
+{"v":1,"user_id":"<你的UID>","username":"<可选，当前版本零消费>"}
+```
+
+**构造**（脚本自动回验六步校验链，口径与服务端一致）：
+
+```bash
+LEDGER_USER_ID=<你的UID> scripts/make_credential.sh
+# 等价手工：echo '{"v":1,"user_id":"<你的UID>","username":"<可选>"}' | base64
+```
+
+**脱敏要求**：凭证串等价于用户身份，勿提交仓库、勿写入日志、勿在文档示例明文（一律 `<你的UID>` 占位符）；平台侧经 MCP 凭证机制加密存储注入，本机手工使用时以 env 方式设置。
+
+**六步校验链**（`ledger/db.py parse_credential`；任一步失败 fail-fast：stderr 一行 `credential_error code=...` + exit 2，不降级、不回落默认用户，MCP/REST 双入口零豁免）：
+
+| # | 校验 | 失败 code |
+|---|------|-----------|
+| 1 | env 非空 | `env_missing` |
+| 2 | base64 严格解码（validate=True） | `base64_invalid` |
+| 3 | 解码产物 UTF-8 | `json_invalid` |
+| 4 | JSON 对象 | `json_invalid` |
+| 5 | `v == 1`（缺失/非整数/未知版本拒绝） | `version_unknown` |
+| 6 | `user_id` 必填非空且匹配 `^[A-Za-z0-9_-]+$`（路径注入/穿越结构性排除） | `user_id_missing` / `user_id_invalid` |
+
+## LEDGER_DB_PATH 数据文件位置
+
+两级规则（`ledger/db.py db_path()`；无旧路径回退分支）：
+
+1. `LEDGER_DB_PATH` 显式配置**优先**（调试/测试用）；
+2. 未配置 → 按用户拼 `~/.ai_orz/data/users/{uid}/personal/ledger.duckdb`（uid 取自凭证）。
+
+单文件 + WAL；首启自动建库并执行 `schema.sql` 幂等 seed（预置分类 14 条 + 默认账户「现金」）。`.gitignore` 已兜底 `*.duckdb`/`*.wal`，原始明细永不入库。
+
+## 启动方式（双入口）
+
+```bash
+# MCP server（ai orz 平台接入形态：Stdio per-call 短命进程）
+uv run --directory <仓库绝对路径> python -m ledger
+# 平台注册 args 对应：["run","--directory","<仓库绝对路径>","python","-m","ledger"]
+
+# 本地 UI 服务（REST + React 静态托管，仅绑定回环 127.0.0.1:8723）
+uv run --directory <仓库绝对路径> python -m ledger serve
+scripts/serve_ui.sh      # 等价封装：校验 LEDGER_CREDENTIAL 已设后启动
+```
+
+地址与端口：`LEDGER_HOST`（默认 `127.0.0.1`）/ `LEDGER_PORT`（默认 `8723`）env 可配；**默认只绑定回环地址**，不对外网暴露。`LEDGER_CREDENTIAL` 未设或非法 → 两入口同样 fail-fast 退出（exit 2）。
+
+## MCP 工具契约（8 件，FastMCP 注册于 ledger/mcp_server.py）
+
+按名传参（也接受 UUID 直传）；金额一律字符串两位小数（如 "12.50"，必须 >0）。
+
+| 工具 | 用途 | 关键参数与语义要点 |
+|------|------|--------------------|
+| `add_transaction` | 记一笔账 | `txn_type`(expense/income/transfer) 必填；`amount` 必填；`category` 必填语义（按名，支出/收入同名时按方向消歧；**转账不挂分类**）；`account` 缺省→默认账户「现金」；显式新账户名→自动建档 type=virtual；转账 `counter_account` 必填且双边语义（单行：account=转出、counter_account=转入），不计收支；`occurred_at` ISO 字符串缺省=当下；`in_sum` 是否计入收支（默认 true）；`tags` 标签名列表不存在即创建 |
+| `update_transaction` | 改账 | 仅传需要修改的字段，未传字段保持不变；作废流水不可修改；改为 transfer 时自动清空分类并强制不计收支（R3） |
+| `void_transaction` | 作废 | 不物理删除（status 翻转保留可追溯）；重复作废报错 |
+| `get_transaction` | 查单笔 | 按 txn_id 查详情 |
+| `list_transactions` | 查流水 | 时间倒序分页；组合筛选：时间段（ISO 或 YYYY-MM-DD）+ 类型 + 分类（含子分类）+ 账户（含转账双侧）+ 标签 + 关键词（匹配备注与分类名）+ 金额区间；返回 `{items, total}`；默认不含作废（include_voided=true 时含）；**账户筛选名不存在→空集非报错** |
+| `summarize` | 区间收支统计 | 排除转账与不计收支项；`group_by`=category/account/tag/day/month；`direction` 可只看收入或支出；返回各组 `{key, name, income, expense, net}` |
+| `account_balances` | 余额概览 | 各账户当前余额派生实时计算（含转账双边与不计收支项的资金变动）；返回 `{"accounts":[...]}` |
+| `budget_status` | 预算状态 | 缺省=当月；总预算+各分类预算的 已用/剩余/三态（normal / near_limit 临近超支≥80% / over 超支≥100%） |
+
+### 默认账户机制（AMan 拍板案 B）
+
+- schema.sql 幂等 seed 默认账户「现金」（type=cash，id=acc_default_cash）；
+- `add_transaction` 缺省 `account` → 直接记到「现金」；
+- 显式指定不存在的账户名（写入面 add/update）→ get-or-create 自动建档（type=virtual，name=传入名）；命中停用账户→报 `account_disabled` 不复活；
+- 查询面（list_transactions 账户筛选）账户名不存在→返回空集非报错（只读不建档，防幽灵账户）；
+- REST 管理面（/api/v1/accounts）维持强存在性校验不变（显式管理动作保持确定性）。
+
+### 其他共享语义
+
+- **tags get-or-create**：MCP 写入面标签不存在即创建（与账户 get-or-create 同构先例）；改名走 REST 面。
+- **budgets**：周期固定按月；总预算（category=NULL）+ 分类预算；经 REST 面设置（PUT /api/v1/budgets），MCP 面 `budget_status` 只读查询三态。
+- **分类 seed 14 条**：支出 9（餐饮/交通/购物/居住/娱乐/医疗/教育/通讯/其他）+ 收入 5（工资/奖金/理财/红包/其他）；预置类禁删只可停用（R6）；分类管理走 REST 面。
+
+## REST 面（本地 UI 后端）
+
+前缀 `/api/v1`（完整契约 = `/openapi.json`，前端 TS 类型经 openapi-typescript 生成）：
+health `/api/health`；transactions（POST/GET/PATCH/void）；overview；accounts（GET/POST/PATCH，强校验）；categories（GET/POST/PATCH，预置保护）；tags（GET/PATCH 改名）；budgets（GET/PUT）；stats/summary。
+前端构建产物 `ledger/ui/` 存在时由 serve 静态托管（`npm run build` 输出，详见 frontend/README.md）；不存在时 `/` 返回 ui_not_built 提示。
+
+## 常见问题（FAQ）
+
+- **启动报 `credential_error code=env_missing`**：LEDGER_CREDENTIAL 未设置或为空——按上文构造并 export（平台接入时检查 server 注册 credential_requirements 是否声明了 env 绑定 LEDGER_CREDENTIAL）。
+- **`code=base64_invalid`**：值不是合法 base64（常见=误粘了构造命令或提示文本；重跑 make_credential.sh 取输出整行）。
+- **`code=version_unknown` / `user_id_missing` / `user_id_invalid`**：凭证 JSON 格式不对（须 `{"v":1,"user_id":"..."}`，v=1 当前唯一支持版本；user_id 仅限字母数字下划线连字符）。
+- **退出码 2 + stderr 一行结构化错误**：fail-fast 设计行为（凭证链失败），不降级不回落默认用户——修正凭证后重启即可。
+- **`db_busy`（503）**：另一入口正持写锁（DuckDB 单文件排他），自动重试 5 次耗尽后报错，稍候重试。
+- **MCP 握手失败/工具清单为空**：先跑 `scripts/smoke_mcp_stdio.sh` 分流——本仓库侧 OK 则查平台注册配置（command/args/凭证声明）。
+- **「账户不存在：xxx」**：仅 REST 管理面强校验；MCP 写入面已按案 B 自动建档，MCP 查询面返回空集。
+
+## 安全口径
+
+- REST 面默认绑定 `127.0.0.1` 回环，不对外网暴露；`LEDGER_HOST`/`LEDGER_PORT` 仅本机自担配置责任。
+- 凭证仅 env 单行传递（MCP stdio 注入子进程 env / 本机 shell export）；平台侧经 MCP 凭证机制加密存储；凭证串等价于用户身份，零明文示例零日志零入库。
+- 原始流水明细只落本地 DuckDB 文件（.gitignore 已兜底），不进任何远端。
+- MCP/REST 双入口启动 fail-fast 零豁免：无凭证不启动、坏凭证不降级。
 
 ## 目录结构与代码落位表
 
 ```
 ledger/                                # 仓库根（= uv 项目根，pyproject.toml 在此）
-├── pyproject.toml                     # uv 项目定义；依赖在执行单①落码时启用
-├── schema.sql                         # 表结构 + 预置分类 seed（执行单①按方案 v1.0 §3 落位）
+├── pyproject.toml                     # uv 项目定义
+├── schema.sql                         # 表结构 + 预置分类 seed（14 条）+ 默认账户 seed（现金）
+├── scripts/                           # 使用脚本（本 README 快速开始对应四件）
+│   ├── setup_env.sh                   #   环境准备：uv sync + 依赖自检
+│   ├── make_credential.sh             #   构造 LEDGER_CREDENTIAL（含六步链回验）
+│   ├── smoke_mcp_stdio.sh             #   MCP stdio 冒烟（initialize + tools/list 恰 8 工具）
+│   └── serve_ui.sh                    #   本地 UI 启动封装（127.0.0.1:8723）
 ├── ledger/                            # Python 包（单包双入口）
 │   ├── __init__.py
-│   ├── __main__.py                    # 入口分发：`python -m ledger serve`=UI 常驻；默认=MCP stdio
-│   ├── mcp_server.py                  # MCP 薄层：FastMCP 工具注册（M1-M7）+ 语义参数解析（分类名/账户名→ID）
+│   ├── __main__.py                    # 入口分发：serve=UI 常驻；默认=MCP stdio；启动 fail-fast 凭证校验
+│   ├── mcp_server.py                  # MCP 薄层：FastMCP 工具注册（8 件）+ 语义参数解析
 │   ├── api.py                         # REST 薄层：FastAPI 路由 + 静态托管 ledger/ui/（仅 127.0.0.1:8723）
-│   ├── db.py                          # 数据层：短连接（打开→执行→关闭）+ open_with_retry 撞锁重试 + 首启建库
+│   ├── db.py                          # 数据层：短连接 + 撞锁重试 + 首启建库 + 凭证六步链 + db_path 两级规则
 │   ├── models.py                      # pydantic 模型单一事实源：MCP 参数 / REST 请求体 / 响应契约共用
-│   ├── services/                      # ★ 共享业务层（唯一口径）：业务规则只写在这里，两个入口都只做薄皮
+│   ├── services/                      # ★ 共享业务层（唯一口径）：业务规则只写在这里
 │   │   ├── transactions.py            #   记账/改账/作废（作废=status 翻转，禁物理删除）
-│   │   ├── accounts.py                #   账户 CRUD + 余额派生计算（余额不落冗余列，防口径漂移）
-│   │   ├── categories.py              #   两级分类树约束 + 预置集保护（预置类禁删只可停用）
-│   │   ├── tags.py                    #   标签 CRUD + 交易打标
-│   │   ├── budget.py                  #   预算状态计算（正常 / 临近超支 80% / 超支）
-│   │   └── stats.py                   #   区间汇总 / 分组统计（MCP 统计问答与 UI 统计页共用）
-│   └── ui/                            # React 构建产物（frontend/ build 输出，构建生成不入手编，.gitkeep 占位）
-└── frontend/                          # React 前端源码（执行单② `npm create vite` 初始化，见 frontend/README.md）
+│   │   ├── accounts.py                #   账户服务 + 余额派生 + 默认账户补种 + get-or-create
+│   │   ├── categories.py              #   两级分类树约束 + 预置集保护
+│   │   ├── tags.py                    #   标签 CRUD + 交易打标（get-or-create）
+│   │   ├── budget.py                  #   预算状态计算（normal / near_limit / over）
+│   │   └── stats.py                   #   区间汇总 / 分组统计
+│   └── ui/                            # React 构建产物（frontend/ build 输出，不入手编）
+├── tests/                             # pytest（业务规则 + 多用户凭证 + 账户机制）
+└── frontend/                          # React 前端源码（构建：npm run build → ledger/ui/）
 ```
-
-### 落位规则（新增代码先看这张表）
-
-| 要写什么 | 写到哪里 | 说明 |
-|---|---|---|
-| 新的记账/查询业务规则、金额口径、校验 | `ledger/services/*.py` | **唯一落点**。R1-R7 规则全在业务层，入口层禁止出现业务逻辑 |
-| 新 MCP 工具 | `ledger/mcp_server.py` | 只做「工具签名 + 调 services + 返回」，参数模型从 models.py 取 |
-| 新 REST 接口 | `ledger/api.py` | 同上；契约 = FastAPI 自动产出的 OpenAPI schema，前端 TS 类型经 openapi-typescript 生成，不手编 |
-| MCP / REST 共用的请求响应结构 | `ledger/models.py` | pydantic 单一事实源；MCP 工具参数与 REST 请求体同一模型 |
-| 表结构变更 | `schema.sql` | DuckDB 方言；演进走 ALTER（个人场景）；预置分类 seed 也在本文件 |
-| 前端页面/组件 | `frontend/src/pages|components/` | 构建 `build.outDir='../ledger/ui'`；HUD 主题令牌平移进 theme.css（零新增令牌） |
-| react-bits 点缀组件 | `frontend/src/components/vendor/` | copy-paste 单组件 + 保留 license 头，不加 CLI 依赖不整包引入 |
-| 数据文件 | `~/.ai_orz/data/personal/ledger.duckdb` | **不入仓库**（.gitignore 已兜底 *.duckdb/*.wal）；隐私红线见下 |
 
 **双入口同口径铁律**：MCP 面与 UI REST 面是同一业务语义的两种协议皮，任何记账行为必须走 `services/` 唯一通道——禁止在任一入口内直连 duckdb 写业务逻辑。
 
----
-
-## 生成式契约（前后端类型同源）
-
-**单一事实源**：`ledger/models.py`（pydantic）——MCP 工具参数、REST 请求体、响应契约全部从这里派生；前端 TS 类型不手写，经生成链路产出：
-
-```
-ledger/models.py ──► ledger/api.py（FastAPI 路由标注请求/响应模型）
-                        │
-                        ▼
-            FastAPI /openapi.json（契约 schema，自动产出）
-                        │
-                        ▼ openapi-typescript（生成物，禁手改）
-        frontend/src/api/types.ts   ◄── 前端唯一类型入口
-```
-
-- **MCP 面**：工具 schema 由 FastMCP 从 `mcp_server.py` 函数签名派生；工具体内一律构造 `models.py` 模型复用同一套校验（R1-R7 唯一口径）——两个协议皮契约同源，口径永不漂移。
-- **后端消费**：改契约 = 改 `models.py`（或 `api.py` 路由标注），其余端自动跟随；禁止在路由/工具层散写平行结构。
-- **前端消费**：只 import `frontend/src/api/types.ts` 的 `paths` / `components` 类型；该文件顶部自带 `Do not make direct changes to the file.`，**严禁手改**。
-- **重跑口径**：`models.py` / `api.py` 变更后必须重跑 gen:api；契约变更的 code review = diff `types.ts`。
-
-### gen:api 标准命令（执行单②在 frontend/package.json 接线为 `npm run gen:api`）
-
-```bash
-# 1) 离线导出契约 schema（无需起服务；也可改从运行中的 serve 拉 http://127.0.0.1:8723/openapi.json）
-uv run python -c "import json; from ledger.api import create_app; \
-  json.dump(create_app().openapi(), open('/tmp/ledger_openapi.json','w'), ensure_ascii=False)"
-
-# 2) 生成 TS 类型（frontend/ 内执行；生成物落 src/api/types.ts）
-npx openapi-typescript /tmp/ledger_openapi.json -o src/api/types.ts
-```
-
-### 金额字段契约纪律（全链路统一）
-
-- 响应侧金额一律为**字符串两位小数**（如 `"12.50"`，`field_serializer` 强制），TS 类型 = `string`；**禁用 float 承载金额**（二进制误差，记账系统铁律）。
-- 请求侧 `amount` 兼容 `number | string`（pydantic `>0`、18 位 2 位小数校验兜底）；MCP 面金额入参为字符串（更严），两者语义一致（同一套 R1 校验）。
-- 前端展示金额原样使用字符串；聚合与统计一律走后端 `/api/v1/stats`、`/api/v1/overview` 等接口（前端零金额算术）。
-
-## 本地运行（执行单①②落码后生效）
-
-```bash
-# MCP server（ai orz 平台接入形态：Stdio per-call，平台经 create_mcp_server 注册）
-uv run --directory ~/Technology/python/ledger python -m ledger
-
-# 本地 UI 服务（浏览器 http://127.0.0.1:8723）
-uv run --directory ~/Technology/python/ledger python -m ledger serve
-
-# 前端开发（执行单②）
-cd frontend && npm install && npm run dev    # 构建：npm run build → ledger/ui/
-```
-
 ## 开发约定
 
-- **工具链**：uv 管理 Python（>=3.10，官方 MCP SDK 要求）；Node 仅用于前端构建。
-- **提交**：一次交付一笔语义完整 commit，message 写明对应平台任务单；**push / 远端 remote 须 AMan 另行明确授权**，日常零 push。
-- **隐私红线（最高优先级）**：原始流水明细只存本地 `.duckdb`，不进 git、不落平台库、不进任何上报/日志/示例；文档与测试示例一律脱敏虚构数据。
-- **测试**：业务层规则（R1-R7）逐条对应测试，随执行单①建立。
-
-## 当前状态
-
-仓库骨架已建（任务 01a138a2）：目录结构 + 占位说明 + 本 README。**全部业务代码尚未落码**，执行顺序：①MCP+业务层+schema 落码 → ②React P0 → ③平台注册接入试点（PMO 编排）。
+- **工具链**：uv 管理 Python（>=3.10）；Node 仅用于前端构建。
+- **测试**：`uv run pytest`（业务规则 R1-R7 + 多用户凭证链 + 账户机制全量覆盖）。
+- **提交**：一次交付一笔语义完整 commit，message 写明对应平台任务单；push / remote 须 AMan 另行明确授权，日常零 push。
+- **演进约定**：schema 演进以 ALTER 为主，禁止改写历史建表语义；文档/测试示例一律脱敏占位符。
