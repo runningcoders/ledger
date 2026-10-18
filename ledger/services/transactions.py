@@ -344,7 +344,13 @@ def list_transactions(*, start=None, end=None, txn_type: Optional[str] = None,
         where.append("(json_extract_string(t.loc, '$.name') ILIKE ?"
                      " OR json_extract_string(t.loc, '$.addr') ILIKE ?)")
         args.extend([kw, kw])
-    if not include_voided:
+    # 地点过滤=业务查询=只看有效笔（任务 01a14fbd·AMan 拍板增补修复项）：
+    # loc_* 五参任一生效时无条件强制排除作废笔（无论 include_voided 取值，
+    # 软删除不可见于业务过滤）；include_voided 仅在未使用地点过滤时维持
+    # 既有语义（显式状态过滤通道不变）。
+    has_loc_filter = any(v is not None for v in (
+        loc_city, loc_type, loc_biz, loc_poi_id, loc_keyword))
+    if not include_voided or has_loc_filter:
         where.append("t.status = 'active'")
 
     sql_where = (" WHERE " + " AND ".join(where)) if where else ""

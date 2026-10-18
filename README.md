@@ -116,10 +116,11 @@ scripts/serve_ui.sh      # 等价封装：凭证已设=单用户模式启动 / �
 | `update_transaction` | 改账 | 仅传需要修改的字段，未传字段保持不变；作废流水不可修改；改为 transfer 时自动清空分类并强制不计收支（R3）；`location` 缺省/None=不变更 |
 | `void_transaction` | 作废 | 不物理删除（status 翻转保留可追溯）；重复作废报错 |
 | `get_transaction` | 查单笔 | 按 txn_id 查详情 |
-| `list_transactions` | 查流水 | 时间倒序分页；组合筛选：时间段（ISO 或 YYYY-MM-DD）+ 类型 + 分类（含子分类）+ 账户（含转账双侧）+ 标签 + 关键词（匹配备注与分类名）+ 金额区间；返回 `{items, total}`；默认不含作废（include_voided=true 时含）；**账户筛选名不存在→空集非报错**；地点过滤 `loc_city`/`loc_type`/`loc_biz`/`loc_poi_id` 精确 + `loc_keyword` 模糊 |
+| `list_transactions` | 查流水 | 时间倒序分页；组合筛选：时间段（ISO 或 YYYY-MM-DD）+ 类型 + 分类（含子分类）+ 账户（含转账双侧）+ 标签 + 关键词（匹配备注与分类名）+ 金额区间；返回 `{items, total}`；默认不含作废（include_voided=true 时含）；**账户筛选名不存在→空集非报错**；地点过滤 `loc_city`/`loc_type`/`loc_biz`/`loc_poi_id` 精确 + `loc_keyword` 模糊（**任一地点过滤参数生效时强制排除作废流水，include_voided 仅在未使用地点过滤时生效**） |
 | `summarize` | 区间收支统计 | 排除转账与不计收支项；`group_by`=category/account/tag/day/month；`direction` 可只看收入或支出；返回各组 `{key, name, income, expense, net}`；group_by 另支持地点维度 loc_city/loc_adcode/loc_type/loc_biz（NULL 归「未标注地点」组） |
 | `account_balances` | 余额概览 | 各账户当前余额派生实时计算（含转账双边与不计收支项的资金变动）；返回 `{"accounts":[...]}` |
 | `budget_status` | 预算状态 | 缺省=当月；总预算+各分类预算的 已用/剩余/三态（normal / near_limit 临近超支≥80% / over 超支≥100%） |
+| `list_categories` | 查在档分类 | 写入前先查后选（无合适分类再向 add/update 传新名称，写入时自动建档）；`direction` 可只看 expense/income 分类；`include_disabled=true` 时含已停用分类（默认仅启用）；返回 `{"categories":[...]}`（id/name/parent_id/direction/enabled/is_preset/sort） |
 
 ### 默认账户机制（AMan 拍板案 B）
 
@@ -128,6 +129,14 @@ scripts/serve_ui.sh      # 等价封装：凭证已设=单用户模式启动 / �
 - 显式指定不存在的账户名（写入面 add/update）→ get-or-create 自动建档（type=virtual，name=传入名）；命中停用账户→报 `account_disabled` 不复活；
 - 查询面（list_transactions 账户筛选）账户名不存在→返回空集非报错（只读不建档，防幽灵账户）；
 - REST 管理面（/api/v1/accounts）维持强存在性校验不变（显式管理动作保持确定性）。
+
+### 分类写入面 get-or-create（任务 01a14fbd·AMan 拍板①②③④⑤）
+
+- `add_transaction` / `update_transaction` 的 `category` 传入**既有分类名称或 ID**；新名称将自动创建一级分类（direction 继承交易方向，enabled/is_preset/sort 默认值，id=uuid4）；
+- 命中既有分类即返回（含停用分类——停用写入仍由写路径校验报 `category_disabled`，不复活不新建）；
+- **ID 直传未命中仍严格报 `category_not_found` 不建档**（严格校验保留）；同向重名报 `category_name_taken`（R6 服务层兜底）；
+- `list_transactions` 查询面分类筛选维持只读解析不建档（查询面语义对齐账户口径）；
+- REST 管理面（/api/v1/categories）维持强校验不变（显式管理动作保持确定性）；改名/停用经 REST `update_category` 管理动作，MCP 工具面本期不暴露。
 
 ### 地点信息 LocationInfo（任务 01a14d06·AMan 拍板②修正：结构体统一协议）
 

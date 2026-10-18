@@ -49,15 +49,18 @@ def _occurred(value: str | None) -> datetime | None:
 
 
 def _category_ref(ref: str | None, txn_type: str | None = None) -> str | None:
-    """分类引用解析：先按 ID 直传，否则按名解析（支出/收入同名时按交易方向消歧）。"""
+    """分类引用解析（写入面 get-or-create，任务 01a14fbd）：先按 ID 直传，
+    否则按名解析（支出/收入同名时按交易方向消歧）；名称未命中且方向可判定
+    （expense/income）→自动建档（一级挂载，方向继承交易方向）。方向不可判定
+    （txn_type=None 局部更新防御 / transfer 不挂分类）与 UUID 直传未命中
+    仍严格报错不建档（update 局部更新/查询面/转账既有语义零回归）。"""
     if ref is None:
         return None
     try:
         uuid.UUID(str(ref))
         return str(ref)  # ID 直传
     except ValueError:
-        return categories_svc.resolve_category_id(
-            str(ref), direction=txn_type if txn_type in ("expense", "income") else None)
+        return categories_svc.resolve_or_create_category_id(str(ref), txn_type)
 
 
 def _account_ref(ref: str) -> str:
@@ -217,7 +220,9 @@ def build_mcp() -> FastMCP:
 
         返回 {items: [...], total: N}；默认不含作废流水（include_voided=true 时含）。
         地点过滤（loc_city/loc_type/loc_biz/loc_poi_id 精确匹配 + loc_keyword
-        对名称/地址模糊匹配）：对 loc 列 JSON 串提取匹配，未标注地点不命中。
+        对名称/地址模糊匹配）：对 loc 列 JSON 串提取匹配，未标注地点不命中；
+        任一地点过滤参数生效时强制排除作废流水（软删除不可见于业务过滤），
+        include_voided 仅在未使用地点过滤时生效。
         """
         # 查询面账户筛选（账户机制拍板案 B）：账户名不存在→直接空集非报错
         # （对齐 stats 空集口径；只读不建档，防查询静默建档产生幽灵账户污染余额）。
@@ -271,5 +276,23 @@ def build_mcp() -> FastMCP:
         """预算执行状态（缺省=当月）：总预算+各分类预算的 已用/剩余/三态
         （normal 正常 / near_limit 临近超支≥80% / over 超支≥100%）。"""
         return budget_svc.budget_status(period).model_dump(mode="json")
+
+    # ---------- 分类查询（先查后选，任务 01a14fbd） ----------
+    @mcp.tool()
+    def list_categories(
+        direction: Optional[Literal["expense", "income"]] = None,
+        include_disabled: bool = False,
+    ) -> dict:
+        """查在档分类列表（写入前先查后选：无合适分类再向 add/update 传新名称，
+        写入时将自动创建一级分类）。direction 可只看支出（expense）或收入
+        （income）分类；include_disabled=true 时含已停用分类（默认仅启用）。
+        返回 {"categories": [...]}，每项含 id/name/parent_id/direction/
+        enabled/is_preset/sort。"""
+        cats = categories_svc.list_categories()
+        if direction is not None:
+            cats = [c for c in cats if c.direction == direction]
+        if not include_disabled:
+            cats = [c for c in cats if c.enabled]
+        return {"categories": [c.model_dump(mode="json") for c in cats]}
 
     return mcp
