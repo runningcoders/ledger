@@ -36,6 +36,27 @@ class UserScoped(BaseModel):
     uid: Optional[str] = None
 
 
+class LocationInfo(BaseModel):
+    """地点信息结构体（高德地理语义，任务 01a14d06·AMan 拍板②修正）。
+
+    9 键无前缀单一事实源：对外（MCP 工具参数 / REST 请求响应）=内部（服务层）=
+    存储（loc 列 JSON 串）同一套结构体协议。全键 Optional，三级空值语义：
+    整体 None=无地点 / 部分填充（如仅 raw）/ 完整 9 键。
+    point 为 "经度,纬度" 串（GCJ-02 原值直存直出零变换，正则防格式漂移与注入）。
+    """
+
+    name: Optional[str] = Field(default=None, max_length=128)
+    city: Optional[str] = Field(default=None, max_length=64)
+    point: Optional[str] = Field(
+        default=None, pattern=r"^-?\d+(\.\d+)?,-?\d+(\.\d+)?$")
+    poi_id: Optional[str] = Field(default=None, max_length=32)
+    adcode: Optional[str] = Field(default=None, max_length=16)
+    type: Optional[str] = Field(default=None, max_length=64)
+    biz: Optional[str] = Field(default=None, max_length=64)
+    addr: Optional[str] = Field(default=None, max_length=256)
+    raw: Optional[str] = Field(default=None, max_length=256)
+
+
 class TransactionCreate(BaseModel):
     """记一笔（M1）：R1 必填约束在服务层按类型细化（转账无分类、需对方账户）。"""
 
@@ -48,6 +69,7 @@ class TransactionCreate(BaseModel):
     note: Optional[str] = None
     in_sum: bool = True  # R4：资金腾挪类置 False
     tags: list[str] = Field(default_factory=list)
+    location: Optional[LocationInfo] = None  # 高德地理语义（拍板②修正：结构体统一协议）
 
 
 class TransactionUpdate(BaseModel):
@@ -62,6 +84,7 @@ class TransactionUpdate(BaseModel):
     note: Optional[str] = None
     in_sum: Optional[bool] = None
     tags: Optional[list[str]] = None
+    location: Optional[LocationInfo] = None  # None=不变更（与既有字段语义一致）
 
 
 class TagOut(BaseModel):
@@ -95,6 +118,7 @@ class TransactionOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     tags: list[TagOut] = Field(default_factory=list)
+    location: Optional[LocationInfo] = None  # loc 列回读（NULL=无地点）
 
     @field_serializer("amount")
     def _amount_str(self, v: Decimal) -> str:

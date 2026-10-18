@@ -17,6 +17,7 @@ from typing import Iterable, Optional
 from ..db import connect
 from ..errors import ConflictError, LedgerError, NotFoundError
 from ..models import (
+    LocationInfo,
     TagOut,
     TransactionCreate,
     TransactionListOut,
@@ -26,12 +27,12 @@ from ..models import (
 
 _TXN_COLS = (
     "id, type, amount, currency, category_id, account_id, counter_account_id, "
-    "occurred_at, note, in_sum, status, created_at, updated_at"
+    "occurred_at, note, in_sum, status, created_at, updated_at, loc"
 )
 _COLS = [
     "id", "type", "amount", "currency", "category_id", "account_id",
     "counter_account_id", "occurred_at", "note", "in_sum", "status",
-    "created_at", "updated_at",
+    "created_at", "updated_at", "loc",
 ]
 
 
@@ -69,9 +70,20 @@ def _tags_of(conn, txid: str) -> list[TagOut]:
     return [TagOut(id=r[0], name=r[1]) for r in rows]
 
 
+def _loc_from_raw(raw: str | None) -> LocationInfo | None:
+    """loc 列 JSON 串 → LocationInfo（防御回退：坏 JSON→None 不阻断主流程）。"""
+    if not raw:
+        return None
+    try:
+        return LocationInfo.model_validate_json(raw)
+    except ValueError:  # 含 pydantic ValidationError
+        return None
+
+
 def _to_out(conn, row) -> TransactionOut:
     data = dict(zip(_COLS, row))
     data["tags"] = _tags_of(conn, data["id"])
+    data["location"] = _loc_from_raw(data.pop("loc"))
     return TransactionOut(**data)
 
 
@@ -130,12 +142,14 @@ def create(params: TransactionCreate, uid: str | None = None) -> TransactionOut:
         txid = str(uuid.uuid4())
         occurred = _naive(params.occurred_at) if params.occurred_at else datetime.now()
         in_sum = False if params.type == "transfer" else params.in_sum  # R3 双保险
+        loc_json = (params.location.model_dump_json()
+                    if params.location is not None else None)
         conn.execute(
             "INSERT INTO transactions (id, type, amount, category_id, account_id,"
-            " counter_account_id, occurred_at, note, in_sum)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " counter_account_id, occurred_at, note, in_sum, loc)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [txid, params.type, params.amount, params.category_id, params.account_id,
-             params.counter_account_id, occurred, params.note, in_sum],
+             params.counter_account_id, occurred, params.note, in_sum, loc_json],
         )
         if params.tags:
             for tid in _tag_ids(conn, params.tags):
@@ -191,16 +205,18 @@ def update(txid: str, params: TransactionUpdate, uid: str | None = None) -> Tran
         if params.tags is not None:  # 标签整体替换语义（先清后写；DuckDB 父表 UPDATE
             # 的 FK 检查对尚存子行敏感，故子表清理必须先于父表 UPDATE 执行）
             conn.execute("DELETE FROM transaction_tags WHERE transaction_id = ?", [txid])
+        merged_loc_json = (params.location.model_dump_json()
+                           if params.location is not None else cur["loc"])
         conn.execute(
             "UPDATE transactions SET type=?, amount=?, category_id=?, account_id=?,"
-            " counter_account_id=?, occurred_at=?, note=?, in_sum=?,"
+            " counter_account_id=?, occurred_at=?, note=?, in_sum=?, loc=?,"
             " updated_at=current_timestamp WHERE id=?",
             [merged_type,
              params.amount if params.amount is not None else cur["amount"],
              merged_category, merged_account, merged_counter,
              _naive(params.occurred_at) if params.occurred_at is not None else cur["occurred_at"],
              params.note if params.note is not None else cur["note"],
-             merged_in_sum, txid],
+             merged_in_sum, merged_loc_json, txid],
         )
         if params.tags is not None:
             for tid in _tag_ids(conn, params.tags):
@@ -252,11 +268,20 @@ def void(txid: str, uid: str | None = None) -> TransactionOut:
 def list_transactions(*, start=None, end=None, txn_type: Optional[str] = None,
                       category_id: Optional[str] = None, account_id: Optional[str] = None,
                       tag=None, keyword: Optional[str] = None,
-                      min_amount=None, max_amount=None, include_voided: bool = False,
+                      min_amount=None, max_amount=None,
+                      loc_city: Optional[str] = None, loc_type: Optional[str] = None,
+                      loc_biz: Optional[str] = None, loc_poi_id: Optional[str] = None,
+                      loc_keyword: Optional[str] = None,
+                      include_voided: bool = False,
                       limit: int = 50, offset: int = 0,
                       uid: str | None = None) -> TransactionListOut:
     """查流水（M3）：组合筛选 + 时间倒序分页；category 含子分类、account 含转账双侧、
-    tag 多值 OR 语义、keyword 匹配备注+分类名。"""
+    tag 多值 OR 语义、keyword 匹配备注+分类名。
+
+    地点过滤（任务 01a14d06·拍板②修正）：loc_city/loc_type/loc_biz/loc_poi_id
+    对 loc 列 JSON 串对应键精确匹配；loc_keyword 对 $.name/$.addr ILIKE 模糊。
+    未标注地点（loc NULL/键缺失）不命中任何地点过滤条件（精确过滤语义）。
+    """
     where: list[str] = []
     args: list = []
     if start is not None:
@@ -299,6 +324,16 @@ def list_transactions(*, start=None, end=None, txn_type: Optional[str] = None,
                 raise LedgerError("invalid_amount", f"金额格式不正确：{raw}") from exc
             where.append(f"t.amount {op} ?")
             args.append(bound)
+    for field, value in (("city", loc_city), ("type", loc_type),
+                         ("biz", loc_biz), ("poi_id", loc_poi_id)):
+        if value is not None:
+            where.append(f"json_extract_string(t.loc, '$.{field}') = ?")
+            args.append(value)
+    if loc_keyword:
+        kw = f"%{loc_keyword}%"
+        where.append("(json_extract_string(t.loc, '$.name') ILIKE ?"
+                     " OR json_extract_string(t.loc, '$.addr') ILIKE ?)")
+        args.extend([kw, kw])
     if not include_voided:
         where.append("t.status = 'active'")
 

@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS transactions (
                       CHECK (status IN ('active','voided')),
   created_at          TIMESTAMP NOT NULL DEFAULT current_timestamp,
   updated_at          TIMESTAMP NOT NULL DEFAULT current_timestamp,
+  loc                 VARCHAR,  -- LocationInfo JSON 串（任务 01a14d06；NULL=无地点，存量零迁移）
   -- R3 声明式兜底：转账一律不计收支（服务层同样强制，双保险）
   CHECK (type <> 'transfer' OR in_sum = FALSE)
 );

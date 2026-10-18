@@ -20,6 +20,16 @@ _BASE_WHERE = ("t.status = 'active' AND t.in_sum = TRUE"
                " AND t.type IN ('income','expense')"
                " AND t.occurred_at >= ? AND t.occurred_at < ?")
 
+# 地点分组维度（任务 01a14d06·拍板②修正）：白名单键→loc 列 JSON 键；
+# NULL/无 loc 列值统一归「未标注地点」组（COALESCE 包裹，空集亦成组）。
+_LOC_GROUP_FIELDS = {
+    "loc_city": "city",
+    "loc_adcode": "adcode",
+    "loc_type": "type",
+    "loc_biz": "biz",
+}
+_LOC_NULL_LABEL = "未标注地点"
+
 
 def overview(month: str | None = None, uid: str | None = None) -> OverviewOut:
     """本月收支概览（U2）：income/expense/balance 三读数。"""
@@ -49,6 +59,9 @@ def summary(*, start, end, group_by: str = "category",
 
     tag 维度：一笔多标签会计入多个分组（横切维度语义，如实呈现）。
 
+    地点分组维度（任务 01a14d06·拍板②修正）：loc_city/loc_adcode/loc_type/loc_biz
+    按 loc 列 JSON 串 json_extract_string 提取分组；NULL 统一归「未标注地点」组。
+
     筛选维度（P1 扩展，可选；不传即沿用既有口径，向后兼容）：
     - category_id：筛选含全部子分类（R6 两级封顶：一层子级即完整子树），
       语义与查流水（list_transactions）一致——父级与其子级的流水均纳入；
@@ -59,9 +72,11 @@ def summary(*, start, end, group_by: str = "category",
     - tag：标签名多值 OR 语义（与查流水一致）；全空串入参等同未传。
     筛选后无匹配项是合法结果（items=[]，空集非错误）。
     """
-    if group_by not in {"category", "account", "tag", "day", "month"}:
+    if group_by not in ({"category", "account", "tag", "day", "month"}
+                        | set(_LOC_GROUP_FIELDS)):
         raise LedgerError("invalid_group_by",
-                          "group_by 须为 category/account/tag/day/month")
+                          "group_by 须为 category/account/tag/day/month"
+                          "/loc_city/loc_adcode/loc_type/loc_biz")
     s = parse_boundary(start)
     e = parse_boundary(end, is_end=True)
     args: list = [s, e]
@@ -100,6 +115,11 @@ def summary(*, start, end, group_by: str = "category",
         joins = ("JOIN transaction_tags tt ON tt.transaction_id = t.id"
                  " JOIN tags tg ON tg.id = tt.tag_id")
         key_expr, name_expr, group_expr = "tg.id", "tg.name", "tg.id, tg.name"
+    elif group_by in _LOC_GROUP_FIELDS:
+        joins = ""  # 地点维度直接从本表 loc 列提取，无联接
+        expr = (f"COALESCE(json_extract_string(t.loc, "
+                f"'$.{_LOC_GROUP_FIELDS[group_by]}'), '{_LOC_NULL_LABEL}')")
+        key_expr = name_expr = group_expr = expr
     else:
         fmt = "%Y-%m-%d" if group_by == "day" else "%Y-%m"
         joins = ""

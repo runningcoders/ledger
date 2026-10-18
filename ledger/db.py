@@ -221,6 +221,30 @@ def _connect_raw(uid: str | None = None, *, read_only: bool = False) -> duckdb.D
 
 _EXPECTED_TABLES = {"categories", "accounts", "transactions", "tags", "transaction_tags", "budgets"}
 
+# 列级演进（任务 01a14d06）：存量旧库升级唯一路径——检查面收敛为单列 loc，
+# 新库由 schema.sql 建表自带、此处检查命中即零操作（幂等）。
+_EXPECTED_COLUMNS = (("transactions", "loc", "VARCHAR"),)
+
+
+def _ensure_columns(conn: duckdb.DuckDBPyConnection) -> None:
+    """列级演进：duckdb_columns() 检查缺列即幂等 ALTER 补齐（_schema_lock 串行化）。
+
+    存量旧库（loc 列出现前的库）缺列→ALTER TABLE ADD COLUMN IF NOT EXISTS 补齐
+    （存量行 NULL=无地点，零迁移）；新库列已在→零操作。connect() 内紧随
+    _ensure_schema 调用（各自独立持锁，不嵌套 threading.Lock）。
+    """
+    with _schema_lock:
+        for table, column, col_type in _EXPECTED_COLUMNS:
+            hit = conn.execute(
+                "SELECT 1 FROM duckdb_columns()"
+                " WHERE schema_name = 'main' AND table_name = ? AND column_name = ?",
+                [table, column],
+            ).fetchone()
+            if hit is None:
+                conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
+                )
+
 
 def _ensure_schema(conn: duckdb.DuckDBPyConnection) -> None:
     """首启建库（方案 B 存在性检查口径，评估面 e 落码裁定）：每次连接检查
@@ -270,6 +294,7 @@ def connect(
     try:
         if not read_only:
             _ensure_schema(conn)
+            _ensure_columns(conn)
         yield conn
     finally:
         conn.close()

@@ -23,6 +23,7 @@ from typing import Literal, Optional
 from mcp.server.fastmcp import FastMCP
 
 from .errors import LedgerError
+from .models import LocationInfo
 from .services import accounts as accounts_svc
 from .services import budget as budget_svc
 from .services import categories as categories_svc
@@ -111,6 +112,7 @@ def build_mcp() -> FastMCP:
         note: Optional[str] = None,
         in_sum: bool = True,
         tags: Optional[list[str]] = None,
+        location: Optional[LocationInfo] = None,
     ) -> dict:
         """记一笔账。txn_type: expense=支出 / income=收入 / transfer=转账。
 
@@ -118,7 +120,9 @@ def build_mcp() -> FastMCP:
         按名称或 ID 传参；account 缺省时记账到默认账户「现金」（账户机制拍板案 B·a）；
         显式指定不存在的账户将自动建档（type=virtual）；转账（transfer）不挂分类且
         必须提供对方账户，且不计收支；occurred_at 为 ISO 时间字符串，缺省=当下；
-        tags 为标签名列表（不存在即创建）。
+        tags 为标签名列表（不存在即创建）；location 为地点结构体
+        （9 键全可选：name/city/point/poi_id/adcode/type/biz/addr/raw，
+        point="经度,纬度" GCJ-02 原值直存直出；整体缺省=无地点）。
         """
         from .models import TransactionCreate
 
@@ -134,6 +138,7 @@ def build_mcp() -> FastMCP:
             note=note,
             in_sum=in_sum,
             tags=tags or [],
+            location=location,
         )
         return txns_svc.create(params).model_dump(mode="json")
 
@@ -150,10 +155,13 @@ def build_mcp() -> FastMCP:
         note: Optional[str] = None,
         in_sum: Optional[bool] = None,
         tags: Optional[list[str]] = None,
+        location: Optional[LocationInfo] = None,
     ) -> dict:
         """按流水 ID 修改一笔账（仅传需要修改的字段，未传字段保持不变）。
 
-        作废流水不可修改；改为转账时自动清空分类并强制不计收支（R3）。
+        作废流水不可修改；改为转账时自动清空分类并强制不计收支（R3）；
+        location 结构体（同 add_transaction 9 键语义）：缺省/None=不变更
+        （显式清空地点本期不做）。
         """
         from .models import TransactionUpdate
 
@@ -169,6 +177,7 @@ def build_mcp() -> FastMCP:
             note=note,
             in_sum=in_sum,
             tags=tags,
+            location=location,
         )
         return txns_svc.update(txn_id, params).model_dump(mode="json")
 
@@ -194,6 +203,11 @@ def build_mcp() -> FastMCP:
         keyword: Optional[str] = None,
         min_amount: Optional[str] = None,
         max_amount: Optional[str] = None,
+        loc_city: Optional[str] = None,
+        loc_type: Optional[str] = None,
+        loc_biz: Optional[str] = None,
+        loc_poi_id: Optional[str] = None,
+        loc_keyword: Optional[str] = None,
         include_voided: bool = False,
         limit: int = 50,
         offset: int = 0,
@@ -202,6 +216,8 @@ def build_mcp() -> FastMCP:
         （含子分类）+ 账户（含转账双侧）+ 标签 + 关键词（匹配备注与分类名）+ 金额区间。
 
         返回 {items: [...], total: N}；默认不含作废流水（include_voided=true 时含）。
+        地点过滤（loc_city/loc_type/loc_biz/loc_poi_id 精确匹配 + loc_keyword
+        对名称/地址模糊匹配）：对 loc 列 JSON 串提取匹配，未标注地点不命中。
         """
         # 查询面账户筛选（账户机制拍板案 B）：账户名不存在→直接空集非报错
         # （对齐 stats 空集口径；只读不建档，防查询静默建档产生幽灵账户污染余额）。
@@ -216,6 +232,8 @@ def build_mcp() -> FastMCP:
             tag=tag, keyword=keyword,
             min_amount=_amount(min_amount) if min_amount else None,
             max_amount=_amount(max_amount) if max_amount else None,
+            loc_city=loc_city, loc_type=loc_type, loc_biz=loc_biz,
+            loc_poi_id=loc_poi_id, loc_keyword=loc_keyword,
             include_voided=include_voided, limit=limit, offset=offset,
         ).model_dump(mode="json")
 
@@ -224,11 +242,14 @@ def build_mcp() -> FastMCP:
     def summarize(
         start: str,
         end: str,
-        group_by: Literal["category", "account", "tag", "day", "month"] = "category",
+        group_by: Literal["category", "account", "tag", "day", "month",
+                         "loc_city", "loc_adcode", "loc_type", "loc_biz"] = "category",
         direction: Optional[Literal["income", "expense"]] = None,
     ) -> dict:
         """区间收支统计（排除转账与不计收支项）。group_by 决定分组维度，
-        返回各组 {key, name, income, expense, net}；direction 可只看收入或支出。"""
+        返回各组 {key, name, income, expense, net}；direction 可只看收入或支出。
+        group_by 另支持地点维度 loc_city/loc_adcode/loc_type/loc_biz
+        （按 loc 列 JSON 串提取；NULL 统一归「未标注地点」组）。"""
         return stats_svc.summary(
             start=start, end=end, group_by=group_by, direction=direction
         ).model_dump(mode="json")

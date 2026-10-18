@@ -112,12 +112,12 @@ scripts/serve_ui.sh      # 等价封装：凭证已设=单用户模式启动 / �
 
 | 工具 | 用途 | 关键参数与语义要点 |
 |------|------|--------------------|
-| `add_transaction` | 记一笔账 | `txn_type`(expense/income/transfer) 必填；`amount` 必填；`category` 必填语义（按名，支出/收入同名时按方向消歧；**转账不挂分类**）；`account` 缺省→默认账户「现金」；显式新账户名→自动建档 type=virtual；转账 `counter_account` 必填且双边语义（单行：account=转出、counter_account=转入），不计收支；`occurred_at` ISO 字符串缺省=当下；`in_sum` 是否计入收支（默认 true）；`tags` 标签名列表不存在即创建 |
-| `update_transaction` | 改账 | 仅传需要修改的字段，未传字段保持不变；作废流水不可修改；改为 transfer 时自动清空分类并强制不计收支（R3） |
+| `add_transaction` | 记一笔账 | `txn_type`(expense/income/transfer) 必填；`amount` 必填；`category` 必填语义（按名，支出/收入同名时按方向消歧；**转账不挂分类**）；`account` 缺省→默认账户「现金」；显式新账户名→自动建档 type=virtual；转账 `counter_account` 必填且双边语义（单行：account=转出、counter_account=转入），不计收支；`occurred_at` ISO 字符串缺省=当下；`in_sum` 是否计入收支（默认 true）；`tags` 标签名列表不存在即创建；`location` 地点结构体（LocationInfo 9 键全可选，见下节） |
+| `update_transaction` | 改账 | 仅传需要修改的字段，未传字段保持不变；作废流水不可修改；改为 transfer 时自动清空分类并强制不计收支（R3）；`location` 缺省/None=不变更 |
 | `void_transaction` | 作废 | 不物理删除（status 翻转保留可追溯）；重复作废报错 |
 | `get_transaction` | 查单笔 | 按 txn_id 查详情 |
-| `list_transactions` | 查流水 | 时间倒序分页；组合筛选：时间段（ISO 或 YYYY-MM-DD）+ 类型 + 分类（含子分类）+ 账户（含转账双侧）+ 标签 + 关键词（匹配备注与分类名）+ 金额区间；返回 `{items, total}`；默认不含作废（include_voided=true 时含）；**账户筛选名不存在→空集非报错** |
-| `summarize` | 区间收支统计 | 排除转账与不计收支项；`group_by`=category/account/tag/day/month；`direction` 可只看收入或支出；返回各组 `{key, name, income, expense, net}` |
+| `list_transactions` | 查流水 | 时间倒序分页；组合筛选：时间段（ISO 或 YYYY-MM-DD）+ 类型 + 分类（含子分类）+ 账户（含转账双侧）+ 标签 + 关键词（匹配备注与分类名）+ 金额区间；返回 `{items, total}`；默认不含作废（include_voided=true 时含）；**账户筛选名不存在→空集非报错**；地点过滤 `loc_city`/`loc_type`/`loc_biz`/`loc_poi_id` 精确 + `loc_keyword` 模糊 |
+| `summarize` | 区间收支统计 | 排除转账与不计收支项；`group_by`=category/account/tag/day/month；`direction` 可只看收入或支出；返回各组 `{key, name, income, expense, net}`；group_by 另支持地点维度 loc_city/loc_adcode/loc_type/loc_biz（NULL 归「未标注地点」组） |
 | `account_balances` | 余额概览 | 各账户当前余额派生实时计算（含转账双边与不计收支项的资金变动）；返回 `{"accounts":[...]}` |
 | `budget_status` | 预算状态 | 缺省=当月；总预算+各分类预算的 已用/剩余/三态（normal / near_limit 临近超支≥80% / over 超支≥100%） |
 
@@ -128,6 +128,28 @@ scripts/serve_ui.sh      # 等价封装：凭证已设=单用户模式启动 / �
 - 显式指定不存在的账户名（写入面 add/update）→ get-or-create 自动建档（type=virtual，name=传入名）；命中停用账户→报 `account_disabled` 不复活；
 - 查询面（list_transactions 账户筛选）账户名不存在→返回空集非报错（只读不建档，防幽灵账户）；
 - REST 管理面（/api/v1/accounts）维持强存在性校验不变（显式管理动作保持确定性）。
+
+### 地点信息 LocationInfo（任务 01a14d06·AMan 拍板②修正：结构体统一协议）
+
+账单可挂地点（高德地理语义），**对外（MCP 工具参数）/ 内部（服务层）/ 存储（loc 列 JSON 串）同一套 `LocationInfo` 结构体协议**：
+
+| 字段 | 含义 | 长度上限 |
+|------|------|----------|
+| `name` | 地点名称（如「虚构咖啡店」） | 128 |
+| `city` | 城市 | 64 |
+| `point` | 经纬度 `"经度,纬度"`（GCJ-02 原值直存直出零变换） | 仅格式校验（正则见下） |
+| `poi_id` | 高德 POI ID | 32 |
+| `adcode` | 行政区划编码 | 16 |
+| `type` | 地点类型（高德分类，如「餐饮服务;咖啡厅」） | 64 |
+| `biz` | 商圈 | 64 |
+| `addr` | 地址详情 | 256 |
+| `raw` | 原始解析片段（备查） | 256 |
+
+- **三级空值语义**：`location` 整体缺省/None=无地点；部分填充（如仅 `raw`）合法；完整 9 键=完整地点。
+- **高德解析编排口径**：`add_transaction` / `update_transaction`（MCP 与 REST 同构）传 `location` 结构体对象；**解析高德 API 响应→装配结构体属调用方（Agent 编排）职责**，本服务不做外部 HTTP 调用、不持高德凭证（调用方自行解析后传入，point 直存原值）。
+- **修改语义**：`update_transaction` 不传 `location`=不变更（与既有字段一致）；显式清空地点本期不做。
+- **查询统计**：`list_transactions` 增 `loc_city` / `loc_type` / `loc_biz` / `loc_poi_id` 精确过滤与 `loc_keyword`（对名称/地址模糊匹配）；`summarize` 的 `group_by` 增 `loc_city` / `loc_adcode` / `loc_type` / `loc_biz` 四维（NULL 统一归「未标注地点」组）。
+- **存量账单零迁移**：loc 列 NULL=无地点；旧库经 `_ensure_columns` 连接时自动补列（幂等）。
 
 ### 其他共享语义
 
