@@ -37,6 +37,17 @@ const PIE_COLORS = [
 
 type Month = string // 'YYYY-MM'
 
+/** 占比图分组维度（后端 stats/summary group_by：分类 + 地点 4 维，任务书 f 项） */
+type PieDim = 'category' | 'loc_city' | 'loc_biz' | 'loc_type' | 'loc_adcode'
+
+const PIE_DIMS: { key: PieDim; label: string }[] = [
+  { key: 'category', label: '分类' },
+  { key: 'loc_city', label: '城市' },
+  { key: 'loc_biz', label: '商圈' },
+  { key: 'loc_type', label: '类型' },
+  { key: 'loc_adcode', label: '区域' },
+]
+
 function shiftMonth(m: Month, delta: number): Month {
   const [y, mo] = m.split('-').map(Number)
   const d = new Date(y, mo - 1 + delta, 1)
@@ -82,6 +93,8 @@ export default function StatsPage({ data, onJump }: Props) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   // 趋势图粒度（§5.1：默认月粒度可切换日粒度）
   const [trendGrain, setTrendGrain] = useState<'month' | 'day'>('month')
+  // 占比图分组维度（地点 4 维对应 summarize group_by 新值；标签中文值传英文键）
+  const [pieDim, setPieDim] = useState<PieDim>('category')
   const [catOut, setCatOut] = useState<StatsOut | null>(null)
   const [trendOut, setTrendOut] = useState<StatsOut | null>(null)
   const [dayOut, setDayOut] = useState<StatsOut | null>(null)
@@ -109,7 +122,7 @@ export default function StatsPage({ data, onJump }: Props) {
     setLoading(true)
     setError(null)
     Promise.all([
-      api.statsSummary({ ...base, group_by: 'category' }),
+      api.statsSummary({ ...base, group_by: pieDim }),
       api.statsSummary({ ...trend, group_by: trendGrain }),
       api.statsSummary({ ...base, group_by: 'day' }),
     ])
@@ -128,7 +141,7 @@ export default function StatsPage({ data, onJump }: Props) {
     return () => {
       alive = false
     }
-  }, [bounds, trendBounds, filters, trendGrain])
+  }, [bounds, trendBounds, filters, trendGrain, pieDim])
 
   const catItems = catOut?.items ?? []
   const totalExpense = useMemo(
@@ -193,7 +206,8 @@ export default function StatsPage({ data, onJump }: Props) {
   }, [dayMap])
 
   const jumpCategory = (key: string) => {
-    if (key) onJump({ categoryId: key })
+    // 仅分类维度可跳流水页预置筛选；地点维度流水页无对应筛选参数，点击不跳转（披露项）
+    if (pieDim === 'category' && key) onJump({ categoryId: key })
   }
 
   return (
@@ -278,7 +292,23 @@ export default function StatsPage({ data, onJump }: Props) {
           {/* ① 分类占比（支出；点击扇区/图例 → 流水页预置该分类筛选） */}
           <div className="card bg-base-100 shadow">
             <div className="card-body py-5">
-              <h2 className="font-medium">分类占比（支出）</h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="font-medium">
+                  {PIE_DIMS.find((d) => d.key === pieDim)?.label ?? '分类'}占比（支出）
+                </h2>
+                <select
+                  className="select select-bordered select-xs w-24"
+                  value={pieDim}
+                  onChange={(e) => setPieDim(e.target.value as PieDim)}
+                  aria-label="占比分组维度"
+                >
+                  {PIE_DIMS.map((d) => (
+                    <option key={d.key} value={d.key}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {pieData.length === 0 ? (
                 <div className="h-56 grid place-items-center opacity-60 text-sm">本月暂无数据</div>
               ) : (

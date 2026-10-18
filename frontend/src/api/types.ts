@@ -429,6 +429,35 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * LocationInfo
+         * @description 地点信息结构体（高德地理语义，任务 01a14d06·AMan 拍板②修正）。
+         *
+         *     9 键无前缀单一事实源：对外（MCP 工具参数 / REST 请求响应）=内部（服务层）=
+         *     存储（loc 列 JSON 串）同一套结构体协议。全键 Optional，三级空值语义：
+         *     整体 None=无地点 / 部分填充（如仅 raw）/ 完整 9 键。
+         *     point 为 "经度,纬度" 串（GCJ-02 原值直存直出零变换，正则防格式漂移与注入）。
+         */
+        LocationInfo: {
+            /** Name */
+            name?: string | null;
+            /** City */
+            city?: string | null;
+            /** Point */
+            point?: string | null;
+            /** Poi Id */
+            poi_id?: string | null;
+            /** Adcode */
+            adcode?: string | null;
+            /** Type */
+            type?: string | null;
+            /** Biz */
+            biz?: string | null;
+            /** Addr */
+            addr?: string | null;
+            /** Raw */
+            raw?: string | null;
+        };
+        /**
          * OverviewOut
          * @description 本月收支概览（U2）：口径=排除转账（R3）与不计收支项（R4）；结余=收-支。
          */
@@ -497,6 +526,7 @@ export interface components {
             in_sum: boolean;
             /** Tags */
             tags?: string[];
+            location?: components["schemas"]["LocationInfo"] | null;
         };
         /**
          * TransactionListOut
@@ -556,6 +586,7 @@ export interface components {
             updated_at: string;
             /** Tags */
             tags?: components["schemas"]["TagOut"][];
+            location?: components["schemas"]["LocationInfo"] | null;
         };
         /**
          * TransactionUpdate
@@ -580,6 +611,7 @@ export interface components {
             in_sum?: boolean | null;
             /** Tags */
             tags?: string[] | null;
+            location?: components["schemas"]["LocationInfo"] | null;
         };
         /** ValidationError */
         ValidationError: {

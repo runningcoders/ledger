@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Account, Category, Tag, Txn } from '../api/model'
+import type { Account, Category, LocationInfo, Tag, Txn } from '../api/model'
 import type { TxnCreate, TxnUpdate } from '../api/model'
 import { fromDatetimeLocal, toDatetimeLocal } from '../lib/datetime'
 
@@ -25,6 +25,27 @@ const TYPE_TABS: { key: TxnType; label: string }[] = [
   { key: 'income', label: '收入' },
   { key: 'transfer', label: '转账' },
 ]
+
+/** LocationInfo 九键（与后端单一事实源同序：name/city/point/poi_id/adcode/type/biz/addr/raw） */
+const LOC_KEYS: (keyof LocationInfo)[] = [
+  'name',
+  'city',
+  'point',
+  'poi_id',
+  'adcode',
+  'type',
+  'biz',
+  'addr',
+  'raw',
+]
+
+/** 地点九键 → 请求载荷（纯函数）：全空=无地点不传键（后端 None=不变更/无地点）；
+ *  任一非空=全键写入，空键落 null（三级空值语义的部分填充形态）。 */
+function locPayload(loc: Record<keyof LocationInfo, string>): LocationInfo | undefined {
+  const trimmed = LOC_KEYS.map((k) => [k, loc[k].trim()] as const)
+  if (trimmed.every(([, v]) => v === '')) return undefined
+  return Object.fromEntries(trimmed) as LocationInfo
+}
 
 /** 记一笔表单（UI 规范 §3.3，新建/编辑双态复用；校验 R1 全行内即时报错） */
 export default function TransactionForm({
@@ -52,6 +73,19 @@ export default function TransactionForm({
   )
   const [newTagName, setNewTagName] = useState('')
   const [inSum, setInSum] = useState(editing ? editing.in_sum : true)
+
+  // 地点信息（LocationInfo 九键全可选；折叠区默认收起，编辑态有地点时展开回读）
+  const [showLoc, setShowLoc] = useState(editing?.location != null)
+  const [showLocAdvanced, setShowLocAdvanced] = useState(false)
+  const [locName, setLocName] = useState(editing?.location?.name ?? '')
+  const [locCity, setLocCity] = useState(editing?.location?.city ?? '')
+  const [locPoint, setLocPoint] = useState(editing?.location?.point ?? '')
+  const [locPoiId, setLocPoiId] = useState(editing?.location?.poi_id ?? '')
+  const [locAdcode, setLocAdcode] = useState(editing?.location?.adcode ?? '')
+  const [locType, setLocType] = useState(editing?.location?.type ?? '')
+  const [locBiz, setLocBiz] = useState(editing?.location?.biz ?? '')
+  const [locAddr, setLocAddr] = useState(editing?.location?.addr ?? '')
+  const [locRaw, setLocRaw] = useState(editing?.location?.raw ?? '')
 
   // 行内校验错误（R1：即时报错，不用浏览器原生弹窗）
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -106,6 +140,17 @@ export default function TransactionForm({
       note: note.trim() === '' ? undefined : note.trim(),
       in_sum: isTransfer ? false : inSum, // 转账强制不计收支（R3，后端双保险）
       tags: selectedTags,
+      location: locPayload({
+        name: locName,
+        city: locCity,
+        point: locPoint,
+        poi_id: locPoiId,
+        adcode: locAdcode,
+        type: locType,
+        biz: locBiz,
+        addr: locAddr,
+        raw: locRaw,
+      }),
     }
 
     if (editing) {
@@ -264,6 +309,110 @@ export default function TransactionForm({
           placeholder="备注原文"
         />
       </label>
+
+      {/* 7.5 地点信息（选填，默认收起零负担；数据全来自调用方传参，零高德直连零自动联想——拍板④） */}
+      <div className="border border-base-300 rounded-lg" data-testid="location-section">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between px-3 py-2 text-sm"
+          onClick={() => setShowLoc((v) => !v)}
+        >
+          <span className="label-text">地点信息（选填）</span>
+          <span className="flex items-center gap-2">
+            {editing?.location != null && <span className="badge badge-ghost badge-xs">已有</span>}
+            <span className="opacity-50">{showLoc ? '▾' : '▸'}</span>
+          </span>
+        </button>
+        {showLoc && (
+          <div className="px-3 pb-3 grid gap-2">
+            <input
+              type="text"
+              className="input input-bordered input-sm w-full"
+              value={locName}
+              onChange={(e) => setLocName(e.target.value)}
+              placeholder="地点名称（如 星巴克·国贸店）"
+              autoComplete="off"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={locCity}
+                onChange={(e) => setLocCity(e.target.value)}
+                placeholder="城市"
+                autoComplete="off"
+              />
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={locAddr}
+                onChange={(e) => setLocAddr(e.target.value)}
+                placeholder="地址"
+                autoComplete="off"
+              />
+            </div>
+            <input
+              type="text"
+              className="input input-bordered input-sm w-full font-mono"
+              value={locPoint}
+              onChange={(e) => setLocPoint(e.target.value)}
+              placeholder="经度,纬度（GCJ-02，如 116.397428,39.90923）"
+              autoComplete="off"
+            />
+            <input
+              type="text"
+              className="input input-bordered input-sm w-full"
+              value={locRaw}
+              onChange={(e) => setLocRaw(e.target.value)}
+              placeholder="原始描述（备注性，选填）"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs justify-start px-0 text-xs opacity-60"
+              onClick={() => setShowLocAdvanced((v) => !v)}
+            >
+              {showLocAdvanced ? '▾ 高级字段' : '▸ 高级字段（来自高德解析）'}
+            </button>
+            {showLocAdvanced && (
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={locPoiId}
+                  onChange={(e) => setLocPoiId(e.target.value)}
+                  placeholder="poi_id（高德解析）"
+                  autoComplete="off"
+                />
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={locAdcode}
+                  onChange={(e) => setLocAdcode(e.target.value)}
+                  placeholder="adcode（高德解析）"
+                  autoComplete="off"
+                />
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={locType}
+                  onChange={(e) => setLocType(e.target.value)}
+                  placeholder="type（高德解析）"
+                  autoComplete="off"
+                />
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={locBiz}
+                  onChange={(e) => setLocBiz(e.target.value)}
+                  placeholder="biz（高德解析）"
+                  autoComplete="off"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* 8. 标签：chips 点选 + 输入即挂（提交时后端按名称 get-or-create） */}
       <div className="form-control">

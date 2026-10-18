@@ -327,7 +327,8 @@ def create_app() -> FastAPI:
         start: str,
         end: str,
         group_by: str = Query(default="category",
-                              pattern="^(category|account|tag|day|month)$"),
+                              pattern="^(category|account|tag|day|month"
+                                      "|loc_city|loc_adcode|loc_type|loc_biz)$"),
         direction: Optional[str] = Query(default=None, pattern="^(income|expense)$"),
         category_id: Optional[str] = None,
         account_id: Optional[str] = None,

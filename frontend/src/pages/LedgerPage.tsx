@@ -532,6 +532,11 @@ export default function LedgerPage({
                                 {thousands(t.amount)}
                               </span>
                               <span className="flex gap-1">
+                                {t.location && (t.location.name || t.location.city) && (
+                                  <span className="badge badge-ghost badge-xs">
+                                    📍{t.location.name || t.location.city}
+                                  </span>
+                                )}
                                 {isTransfer && <span className="badge badge-ghost badge-xs">转账</span>}
                                 {!t.in_sum && !isTransfer && <span className="badge badge-ghost badge-xs">不计收支</span>}
                                 {voided && <span className="badge badge-error badge-xs">已作废</span>}

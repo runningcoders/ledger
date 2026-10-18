@@ -106,6 +106,32 @@ export default function TransactionDetail({
         ))}
       </div>
 
+      {/* 地点信息（location 非空时展示；名称/城市/地址/坐标原值，技术性键弱展示） */}
+      {txn.location && (
+        <div className="card bg-base-200/40 text-sm" data-testid="location-block">
+          <div className="card-body py-3 px-4 grid gap-1">
+            <div className="flex items-center gap-2 font-medium">
+              <span>📍</span>
+              <span>{txn.location.name || txn.location.city || '地点信息'}</span>
+              {txn.location.name && txn.location.city && (
+                <span className="opacity-60">{txn.location.city}</span>
+              )}
+            </div>
+            {txn.location.addr && <div className="opacity-70 break-all">{txn.location.addr}</div>}
+            {txn.location.point && (
+              <div className="font-mono text-xs opacity-70 break-all">{txn.location.point}</div>
+            )}
+            <div className="flex flex-wrap gap-x-3 text-xs opacity-50 break-all">
+              {txn.location.type && <span>类型 {txn.location.type}</span>}
+              {txn.location.biz && <span>商圈 {txn.location.biz}</span>}
+              {txn.location.adcode && <span>区划 {txn.location.adcode}</span>}
+              {txn.location.poi_id && <span>POI {txn.location.poi_id}</span>}
+              {txn.location.raw && <span>原文 {txn.location.raw}</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 操作区：作废态无编辑/作废按钮（D3） */}
       {!voided && (
         <div className="flex justify-end gap-2">

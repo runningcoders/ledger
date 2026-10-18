@@ -304,3 +304,52 @@ def test_rest_create_update_with_location(tmp_ledger_db):
         "location": {"city": "上海", "name": "虚构书店"}})
     assert r3.json()["location"]["city"] == "上海"
     assert r3.json()["location"]["name"] == "虚构书店"
+
+
+# ---------- REST 面地点 group_by（补单 01a14d84：pattern 扩 9 值接缝修复） ----------
+
+def test_rest_summary_loc_group_dims(tmp_ledger_db):
+    """REST GET /api/v1/stats/summary group_by=4 地点值：200 且分组正确，含 NULL 归组。"""
+    from ledger.api import create_app
+
+    client = TestClient(create_app())
+    loc = {"name": "虚构咖啡店", "city": "北京", "point": "116.397428,39.90923",
+           "adcode": "110105", "type": "餐饮服务;咖啡厅", "biz": "国贸"}
+    r = client.post("/api/v1/transactions", json={
+        "type": "expense", "amount": "18.00", "category_id": "cat_exp_01",
+        "account_id": _account().id, "location": loc})
+    assert r.status_code == 201
+    r = client.post("/api/v1/transactions", json={
+        "type": "expense", "amount": "7.00", "category_id": "cat_exp_01",
+        "account_id": _account().id})  # 无地点 → 「未标注地点」NULL 归组
+    assert r.status_code == 201
+
+    for dim, key, amount in (("loc_city", "北京", "18.00"),
+                             ("loc_adcode", "110105", "18.00"),
+                             ("loc_type", "餐饮服务;咖啡厅", "18.00"),
+                             ("loc_biz", "国贸", "18.00")):
+        resp = client.get("/api/v1/stats/summary", params={
+            "start": "2026-01-01", "end": "2026-12-31", "group_by": dim})
+        assert resp.status_code == 200, (dim, resp.status_code)
+        body = resp.json()
+        assert body["group_by"] == dim
+        by_key = {i["key"]: i["expense"] for i in body["items"]}
+        assert by_key == {key: amount, "未标注地点": "7.00"}, (dim, by_key)
+
+    # 「未标注地点」组：key 与 name 同为归组标签（COALESCE 双表达式同值）
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-01-01", "end": "2026-12-31", "group_by": "loc_city"})
+    null_row = [i for i in r.json()["items"] if i["name"] == "未标注地点"]
+    assert len(null_row) == 1
+    assert null_row[0]["key"] == "未标注地点"
+    assert null_row[0]["expense"] == "7.00"
+
+
+def test_rest_summary_invalid_loc_group_by_rejected(tmp_ledger_db):
+    """非法 group_by（含地点形态变体 loc_foo）仍被 REST pattern 422 拦截。"""
+    from ledger.api import create_app
+
+    client = TestClient(create_app())
+    r = client.get("/api/v1/stats/summary", params={
+        "start": "2026-01-01", "end": "2026-12-31", "group_by": "loc_foo"})
+    assert r.status_code == 422
