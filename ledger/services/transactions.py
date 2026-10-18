@@ -202,9 +202,16 @@ def update(txid: str, params: TransactionUpdate, uid: str | None = None) -> Tran
                   account_id=merged_account, counter_account_id=merged_counter,
                   check_enabled=False)
 
-        if params.tags is not None:  # 标签整体替换语义（先清后写；DuckDB 父表 UPDATE
-            # 的 FK 检查对尚存子行敏感，故子表清理必须先于父表 UPDATE 执行）
-            conn.execute("DELETE FROM transaction_tags WHERE transaction_id = ?", [txid])
+        # 方案 A「无条件先清+按需回写」：DuckDB 父表 UPDATE 的 FK 检查对尚存
+        # 子行敏感，且与是否传 tags 无关（tags=None 局部更新同触发，评估单
+        # 01a14ea3 定谳）。未传 tags（局部更新最常见形态）先保存现标签集、
+        # UPDATE 后原样回写（净语义=标签保持不变）；传 tags=整体替换语义零变化。
+        restore_ids: list[str] = []
+        if params.tags is None:
+            restore_ids = [r[0] for r in conn.execute(
+                "SELECT tag_id FROM transaction_tags WHERE transaction_id = ?"
+                " ORDER BY tag_id", [txid]).fetchall()]
+        conn.execute("DELETE FROM transaction_tags WHERE transaction_id = ?", [txid])
         merged_loc_json = (params.location.model_dump_json()
                            if params.location is not None else cur["loc"])
         conn.execute(
@@ -219,11 +226,14 @@ def update(txid: str, params: TransactionUpdate, uid: str | None = None) -> Tran
              merged_in_sum, merged_loc_json, txid],
         )
         if params.tags is not None:
-            for tid in _tag_ids(conn, params.tags):
-                conn.execute(
-                    "INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)",
-                    [txid, tid],
-                )
+            write_ids = _tag_ids(conn, params.tags)  # 整体替换语义（输入即建）
+        else:
+            write_ids = restore_ids  # 未传 tags：原样回写
+        for tid in write_ids:
+            conn.execute(
+                "INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)",
+                [txid, tid],
+            )
         row = conn.execute(
             f"SELECT {_TXN_COLS} FROM transactions WHERE id = ?", [txid]
         ).fetchone()

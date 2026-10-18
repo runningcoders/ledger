@@ -367,3 +367,40 @@ def test_rename_tag_not_found_and_name_taken():
     with pytest.raises(ConflictError):
         tag_svc.rename_tag(ta, "标签B")
     assert [t.name for t in tx.get(a.id).tags] == ["标签A"]   # 冲突时零扰动
+
+
+# ---------- 缺陷②回归：带标签流水局部更新（不传 tags，方案 A） ----------
+
+
+def test_update_tagged_expense_local_update_keeps_tags():
+    """expense 带标签流水局部更新（不传 tags）：成功+标签保持+字段生效。"""
+    out = _create(tags=["回归甲", "回归乙"], amount="20.00")
+    upd = tx.update(out.id, TransactionUpdate(amount="33.00", note="局部更新·虚构"))
+    assert str(upd.amount) == "33.00" and upd.note == "局部更新·虚构"
+    assert sorted(t.name for t in upd.tags) == sorted(["回归甲", "回归乙"])
+    from ledger.db import connect
+    with connect() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) FROM transaction_tags WHERE transaction_id = ?",
+            [out.id]).fetchone()[0]
+    assert n == 2  # 联接行数保全零重复
+
+
+def test_update_tagged_income_local_update_keeps_tags():
+    """income 带标签流水局部更新（不传 tags）：成功+标签保持+字段生效。"""
+    a = _account("工资本")
+    out = _create(type="income", amount="100.00", category_id=INC_WAGE,
+                  account_id=a.id, tags=["工资单"])
+    upd = tx.update(out.id, TransactionUpdate(note="局部更新·虚构"))
+    assert upd.note == "局部更新·虚构" and str(upd.amount) == "100.00"
+    assert [t.name for t in upd.tags] == ["工资单"]
+
+
+def test_update_tagged_transfer_local_update_keeps_tags():
+    """transfer 带标签流水局部更新（不传 tags）：成功+标签保持+字段生效。"""
+    a, b = _account("转出甲"), _account("转入乙", "credit")
+    out = _create(type="transfer", category_id=None, account_id=a.id,
+                  counter_account_id=b.id, amount="50.00", tags=["还款"])
+    upd = tx.update(out.id, TransactionUpdate(amount="66.00"))
+    assert str(upd.amount) == "66.00" and upd.type == "transfer"
+    assert [t.name for t in upd.tags] == ["还款"]

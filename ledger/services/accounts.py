@@ -73,23 +73,83 @@ def create_account(params: AccountCreate, uid: str | None = None) -> AccountOut:
 
 
 def update_account(aid: str, params: AccountUpdate, uid: str | None = None) -> AccountOut:
-    """可改项克制：名称与启停（销户语义复杂化，P0/P1 无删除动作）。"""
+    """可改项克制：名称与启停（销户语义复杂化，P0/P1 无删除动作）。
+
+    被流水引用账户（transactions.account_id/counter_account_id 外键）的父表
+    UPDATE 会触发 DuckDB 外键检查（同族盲区，评估单 01a14ea3 定谳；enabled
+    停用同理），故采用「桥接暂离」编排：引用流水先改挂桥接临时账户、流水
+    标签联接先存后回（流水侧 UPDATE 的父检查对 transaction_tags 尚存子行
+    同样敏感，与 transactions.update()/rename_tag 先例同构）、父行原地变更
+    后切回并拆除桥接。全程逐语句自动提交——显式事务内先清后改仍触发 FK
+    违规（父行 FK 检查不读同事务内未提交的删除）。
+    """
     with connect(uid) as conn:
         if conn.execute("SELECT 1 FROM accounts WHERE id = ?", [aid]).fetchone() is None:
             raise NotFoundError("account_not_found", f"账户不存在：{aid}")
         sets, args = [], []
         if params.name is not None:
+            # 重名检查前置：冲突零扰动返回（替代原 ConstraintException 兜底
+            # ——该兜底会把编排中的 FK 错误误报为「账户名已存在」）
+            row = conn.execute(
+                "SELECT 1 FROM accounts WHERE name = ? AND id <> ?", [params.name, aid]
+            ).fetchone()
+            if row is not None:
+                raise ConflictError("account_name_taken", f"账户名已存在：{params.name}")
             sets.append("name = ?")
             args.append(params.name)
         if params.enabled is not None:
             sets.append("enabled = ?")
             args.append(params.enabled)
         if sets:
+            # 桥接暂离编排：保存+清空引用流水的标签联接 → INSERT 桥接临时
+            # 账户（uuid 形态防撞 UNIQUE 名）→ 引用流水改挂桥接 → 父行原地
+            # 变更 → 切回本账户 → 删除桥接 → 回写标签联接。中途失败存在联接
+            # 丢失窗口——与 void()/rename_tag 先清后写编排固有风险形态一致，
+            # 前置检查做足后编排内失败源趋零。
+            saved = conn.execute(
+                "SELECT transaction_id, tag_id FROM transaction_tags"
+                " WHERE transaction_id IN (SELECT id FROM transactions"
+                " WHERE account_id = ? OR counter_account_id = ?)"
+                " ORDER BY transaction_id, tag_id",
+                [aid, aid],
+            ).fetchall()
+            conn.execute(
+                "DELETE FROM transaction_tags WHERE transaction_id IN"
+                " (SELECT id FROM transactions WHERE account_id = ?"
+                " OR counter_account_id = ?)",
+                [aid, aid],
+            )
+            bridge_id = str(uuid.uuid4())
+            conn.execute(
+                "INSERT INTO accounts (id, name, type) VALUES (?, ?, 'virtual')",
+                [bridge_id, f"__bridge_{uuid.uuid4().hex}"],
+            )
+            conn.execute(
+                "UPDATE transactions SET account_id = ? WHERE account_id = ?",
+                [bridge_id, aid],
+            )
+            conn.execute(
+                "UPDATE transactions SET counter_account_id = ?"
+                " WHERE counter_account_id = ?",
+                [bridge_id, aid],
+            )
             args.append(aid)
-            try:
-                conn.execute(f"UPDATE accounts SET {', '.join(sets)} WHERE id = ?", args)
-            except duckdb.ConstraintException as exc:
-                raise ConflictError("account_name_taken", f"账户名已存在：{params.name}") from exc
+            conn.execute(f"UPDATE accounts SET {', '.join(sets)} WHERE id = ?", args)
+            conn.execute(
+                "UPDATE transactions SET account_id = ? WHERE account_id = ?",
+                [aid, bridge_id],
+            )
+            conn.execute(
+                "UPDATE transactions SET counter_account_id = ?"
+                " WHERE counter_account_id = ?",
+                [aid, bridge_id],
+            )
+            conn.execute("DELETE FROM accounts WHERE id = ?", [bridge_id])
+            for t_id, tag_id in saved:
+                conn.execute(
+                    "INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)",
+                    [t_id, tag_id],
+                )
         return _out(conn, aid)
 
 

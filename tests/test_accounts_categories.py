@@ -136,3 +136,35 @@ def test_category_update_not_found():
 def test_category_direction_immutable_after_create():
     # direction 不在可改模型内（CategoryUpdate 无该字段）——字段级封禁即不可改
     assert "direction" not in CategoryUpdate.model_fields
+
+
+# ---------- 缺陷②同族回归：被引用账户改名/停用（桥接暂离编排） ----------
+
+
+def test_update_referenced_account_rename_succeeds():
+    """被流水引用账户改名成功：改名生效+引用零漂移+标签联接零丢失+零桥接残留。"""
+    from ledger.db import connect
+    a = _acct("被引用户")
+    t = _txn(account_id=a.id, tags=["联接保全"])
+    with connect() as conn:
+        tid = conn.execute("SELECT id FROM tags WHERE name = '联接保全'").fetchone()[0]
+    upd = accounts.update_account(a.id, AccountUpdate(name="改名后户"))
+    assert upd.name == "改名后户"
+    got = tx.get(t.id)
+    assert got.account_id == a.id  # 引用流水 account_id 零漂移
+    assert [x.name for x in got.tags] == ["联接保全"]  # tag 联接零丢失
+    with connect() as conn:
+        joins = conn.execute(
+            "SELECT COUNT(*) FROM transaction_tags"
+            " WHERE transaction_id = ? AND tag_id = ?", [t.id, tid]).fetchone()[0]
+        bridges = conn.execute(
+            "SELECT COUNT(*) FROM accounts WHERE name LIKE '__bridge_%'").fetchone()[0]
+    assert joins == 1 and bridges == 0  # 联接保全且无桥接残留行
+
+
+def test_update_referenced_account_disable_succeeds():
+    """被流水引用账户停用成功（同父表 UPDATE 机制同触发）。"""
+    a = _acct()
+    _txn(account_id=a.id)
+    upd = accounts.update_account(a.id, AccountUpdate(enabled=False))
+    assert upd.enabled is False
