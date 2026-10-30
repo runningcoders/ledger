@@ -13,7 +13,7 @@
   总管模式 uid=None → 聚合全部已注册用户（per-user 异常 stderr 留痕跳过，
   损坏库不放大为全局 5xx；评估面 b 容错口径）；
   总管模式 uid=显式 → 锁定单库（前端按用户切换器）。
-- 写检查 _write_credential（Depends 单点，恰 9 写端点全挂）：单用户模式放行
+- 写检查 _write_credential（Depends 单点，恰 10 写端点全挂）：单用户模式放行
   （零行为变化）；总管模式要求请求级凭证 X-Ledger-Credential，复用 parse_credential
   六步校验链（不做双嗅探，拍板①）；缺失/无效=HTTP 401（拍板④）；
   每请求独立解析，零跨请求缓存。
@@ -106,7 +106,7 @@ def create_app() -> FastAPI:
             content={"error": {"code": "validation_error", "message": str(exc.errors()[:3])}},
         )
 
-    # ---- 总管模式：写端点请求级凭证检查（Depends 单点，恰 9 写端点全挂）----
+    # ---- 总管模式：写端点请求级凭证检查（Depends 单点，恰 10 写端点全挂）----
     def _write_credential(
         x_ledger_credential: Optional[str] = Header(default=None, alias=_CREDENTIAL_HEADER),
     ) -> Optional[str]:
@@ -291,6 +291,15 @@ def create_app() -> FastAPI:
     def update_category_endpoint(category_id: str, params: CategoryUpdate,
                                  uid: Optional[str] = Depends(_write_credential)) -> CategoryOut:
         return categories_svc.update_category(category_id, params, uid=uid)
+
+    @app.delete("/api/v1/categories/{category_id}", response_model=CategoryOut)
+    def archive_category_endpoint(
+        category_id: str, uid: Optional[str] = Depends(_write_credential)
+    ) -> CategoryOut:
+        """受保护归档（缺陷修复批次 01a18c71·C 案）：预置集禁删 + 零引用
+        （子分类 / 流水 / 预算 三条引用面）双闸门，通过后物理移除并返回移除
+        前快照（人工恢复依据）。仅 REST 管理面提供，MCP 工具面无删除动作。"""
+        return categories_svc.archive_category(category_id, uid=uid)
 
     # ---- 标签 ----
     @app.get("/api/v1/tags", response_model=list[TagOut])

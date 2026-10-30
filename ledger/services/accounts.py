@@ -153,12 +153,34 @@ def update_account(aid: str, params: AccountUpdate, uid: str | None = None) -> A
         return _out(conn, aid)
 
 
-def resolve_account_id(name: str) -> str:
-    """语义参数解析（MCP 面）：账户名→ID（账户名唯一，单命中）。"""
+def _is_uuid_form(ref: str) -> bool:
+    """ID 形态判别（**只用于「未命中时是否允许自动建档」的决策**）。
+
+    不作为「ID vs 名称」的分流判据（缺陷修复批次 01a18c71，同族
+    categories._is_uuid_form 口径）：seed 命名空间主键 acc_default_cash 不是
+    UUID 形态却是合法主键——用语法形态判分流＝把合法主键当名称、进而自动建档
+    出幽灵虚拟账户。
+    """
+    try:
+        uuid.UUID(str(ref))
+        return True
+    except ValueError:
+        return False
+
+
+def resolve_account_id(ref: str) -> str:
+    """账户引用解析：**先按主键精确查，未命中再按名称查**（账户名唯一，单命中）。
+
+    判别顺序（缺陷修复批次 01a18c71）：原实现只按 name 查，把 seed 主键字面量
+    acc_default_cash 当成账户名称（写路径会因此自动建档幽灵虚拟账户；本仓
+    live 库尚未发生，属潜在缺陷同期修正）。
+    """
     with connect() as conn:
-        row = conn.execute("SELECT id FROM accounts WHERE name = ?", [name]).fetchone()
+        row = conn.execute("SELECT id FROM accounts WHERE id = ?", [ref]).fetchone()
+        if row is None:
+            row = conn.execute("SELECT id FROM accounts WHERE name = ?", [ref]).fetchone()
     if row is None:
-        raise NotFoundError("account_not_found", f"账户不存在：{name}")
+        raise NotFoundError("account_not_found", f"账户不存在：{ref}")
     return row[0]
 
 
@@ -189,33 +211,62 @@ def ensure_default_account(conn) -> str:
     return DEFAULT_ACCOUNT_ID
 
 
-def resolve_or_create_account_id(name: str) -> str:
-    """MCP 写入面 get-or-create（拍板案 B·c 静默建）：按名解析；不存在即自动建档
-    （type=virtual 游离开局）；UNIQUE 重名即命中幂等；命中停用账户不复活
-    （返回 id 后由服务层统一校验报 account_disabled）。REST 面不经过本函数
-    （显式管理动作维持强校验，拍板⑤）。"""
+def resolve_or_create_account_id(ref: str) -> str:
+    """MCP 写入面 get-or-create（拍板案 B·c 静默建）。
+
+    **判别顺序（缺陷修复批次 01a18c71）**：先按主键精确查 → 未命中再按名称 →
+    双未命中才进入建档决策：
+    - ID 形态（UUID 字面量）→ 严格抛 account_not_found，不建档（原样透传语义
+      由写路径 account_not_found 承担，错误码与文案一致，零回归）；
+    - 名称形态 → 自动建档（type=virtual 游离开局）。
+
+    命中即返回（含停用账户，不复活；由服务层统一校验报 account_disabled）。
+    UNIQUE 重名即命中幂等。REST 面不经过本函数（显式管理动作维持强校验，拍板⑤）。
+    """
+    ref = str(ref)
+    try:
+        return resolve_account_id(ref)
+    except NotFoundError:
+        if _is_uuid_form(ref):
+            raise
+        with connect() as conn:
+            aid = str(uuid.uuid4())
+            try:
+                conn.execute(
+                    "INSERT INTO accounts (id, name, type) VALUES (?, ?, 'virtual')",
+                    [aid, ref],
+                )
+            except duckdb.ConstraintException:
+                # 并发重名兜底：命中即幂等（短连接单写者下极难触发，防御性保留）
+                row = conn.execute(
+                    "SELECT id FROM accounts WHERE name = ?", [ref]).fetchone()
+                if row is None:
+                    raise
+                return row[0]
+            return aid
+
+
+def find_account_id(ref: str) -> Optional[str]:
+    """引用解析（只读不建档）：**先按主键精确查，未命中再按名称查**；都不存在
+    返回 None。MCP 查询面筛选专用——不存在即短路空集（对齐 stats 空集口径，
+    防查询静默建档产生幽灵账户）。
+
+    判别顺序同 resolve_account_id（缺陷修复批次 01a18c71）：查询面传 seed 主键
+    acc_default_cash 也应命中真实账户，而不是因「非 UUID 形态」被当名称查空。
+    """
     with connect() as conn:
-        row = conn.execute("SELECT id FROM accounts WHERE name = ?", [name]).fetchone()
-        if row:
-            return row[0]
-        aid = str(uuid.uuid4())
-        try:
-            conn.execute(
-                "INSERT INTO accounts (id, name, type) VALUES (?, ?, 'virtual')",
-                [aid, name],
-            )
-        except duckdb.ConstraintException:
-            # 并发重名兜底：命中即幂等（短连接单写者下极难触发，防御性保留）
-            row = conn.execute("SELECT id FROM accounts WHERE name = ?", [name]).fetchone()
-            if row is None:
-                raise
-            return row[0]
-        return aid
+        row = conn.execute("SELECT id FROM accounts WHERE id = ?", [ref]).fetchone()
+        if row is None:
+            row = conn.execute("SELECT id FROM accounts WHERE name = ?", [ref]).fetchone()
+    return row[0] if row else None
 
 
 def find_account_id_by_name(name: str) -> Optional[str]:
-    """按名查 id（只读不建档）：MCP 查询面筛选专用——不存在返回 None，
-    由 M3 短路空集（对齐 stats 空集口径，防查询静默建档产生幽灵账户）。"""
+    """按名查 id（只读不建档，历史入口保留）：不存在返回 None。
+
+    新代码请用 find_account_id（id 优先）；本函数语义严格限定「按名」，
+    供既有调用面零回归。
+    """
     with connect() as conn:
         row = conn.execute("SELECT id FROM accounts WHERE name = ?", [name]).fetchone()
     return row[0] if row else None

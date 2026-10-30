@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Literal, Optional
@@ -49,26 +48,26 @@ def _occurred(value: str | None) -> datetime | None:
 
 
 def _category_ref(ref: str | None, txn_type: str | None = None) -> str | None:
-    """分类引用解析（写入面 get-or-create，任务 01a14fbd）：先按 ID 直传，
-    否则按名解析（支出/收入同名时按交易方向消歧）；名称未命中且方向可判定
-    （expense/income）→自动建档（一级挂载，方向继承交易方向）。方向不可判定
-    （txn_type=None 局部更新防御 / transfer 不挂分类）与 UUID 直传未命中
-    仍严格报错不建档（update 局部更新/查询面/转账既有语义零回归）。"""
+    """分类引用解析（唯一入口，**本层不做任何形态分流**）：全部下沉到
+    services.categories.resolve_or_create_category_id——该函数先按主键精确查
+    （seed 命名空间 cat_exp_01/cat_inc_01 等非 UUID 字面量亦是合法主键）、未命中
+    再按名称、双未命中才按「是否 UUID 形态 + 方向是否可判定」决定自动建档或
+    严格报错。方向不可判定（txn_type=None 局部更新/查询面）与 transfer 不建档
+    （既有语义零回归）。
+
+    缺陷修复批次 01a18c71：原实现在本层用 uuid.UUID() 判别「ID vs 名称」，
+    非 UUID 的合法主键被误当名称 → 写路径自动建档出同名垃圾分类（实锚：污染
+    分类 6bdc4552 / name='cat_inc_01'）。判别职责不由语法形态承担，故本层
+    不再持有形态分流——修在服务层，MCP 面与未来任何调用面同时受益。
+    """
     if ref is None:
         return None
-    try:
-        uuid.UUID(str(ref))
-        return str(ref)  # ID 直传
-    except ValueError:
-        return categories_svc.resolve_or_create_category_id(str(ref), txn_type)
+    return categories_svc.resolve_or_create_category_id(str(ref), txn_type)
 
 
 def _account_ref(ref: str) -> str:
-    try:
-        uuid.UUID(str(ref))
-        return str(ref)
-    except ValueError:
-        return accounts_svc.resolve_account_id(str(ref))
+    """账户引用解析（读）：无形态分流，服务层先 id 精确查、未命中再按名。"""
+    return accounts_svc.resolve_account_id(str(ref))
 
 
 def _default_account_id() -> str:
@@ -81,23 +80,29 @@ def _default_account_id() -> str:
 
 
 def _account_write_ref(ref: str) -> str:
-    """账户写入面引用解析（get-or-create 拍板案 B）：ID 直传，否则按名
-    resolve-or-create（自动建档 type=virtual）。"""
-    try:
-        uuid.UUID(str(ref))
-        return str(ref)
-    except ValueError:
-        return accounts_svc.resolve_or_create_account_id(str(ref))
+    """账户写入面引用解析（get-or-create 拍板案 B）：无形态分流——服务层先 id
+    精确查（seed 主键 acc_default_cash 由此命中，不再建幽灵虚拟账户）、未命中
+    再按名；双未命中且 ID 形态严格报错、名称形态自动建档（type=virtual）。"""
+    return accounts_svc.resolve_or_create_account_id(str(ref))
 
 
 def _find_query_ref(ref: str) -> str | None:
-    """账户查询面引用解析（只读不建档）：ID 直传，否则按名查找，
-    不存在返回 None → M3 短路空集（非报错）。"""
-    try:
-        uuid.UUID(str(ref))
-        return str(ref)
-    except ValueError:
-        return accounts_svc.find_account_id_by_name(str(ref))
+    """账户查询面引用解析（只读不建档）：先 id 精确查、未命中再按名，
+    都不存在返回 None → M3 短路空集（非报错）。"""
+    return accounts_svc.find_account_id(str(ref))
+
+
+def _received(**fields) -> dict:
+    """回执入参快照（对账用，缺陷修复批次 01a18c71）：把服务端**实际收到**的
+    关键参数原值回显给调用方，用于当场切分责任面——
+
+    - 回执有值而落库不生效 → 服务端解析/落库缺陷（本次修复范围）；
+    - 回执为 null 而模型声称已传 → 平台转发层或模型侧缺失（服务端无法自证，
+      正是此前「传了但没生效」无从定谳的缺口）。
+
+    向后兼容：只在原有返回字典上新增 `_received` 键，既有字段与类型零变更。
+    """
+    return {"_received": fields}
 
 
 def build_mcp() -> FastMCP:
@@ -143,7 +148,13 @@ def build_mcp() -> FastMCP:
             tags=tags or [],
             location=location,
         )
-        return txns_svc.create(params).model_dump(mode="json")
+        out = txns_svc.create(params).model_dump(mode="json")
+        out.update(_received(
+            occurred_at=occurred_at,
+            location=(location.model_dump(mode="json") if location is not None else None),
+            tags=tags, account=account, category=category,
+            counter_account=counter_account))
+        return out
 
     # ---------- M2 修改 / 作废 ----------
     @mcp.tool()
@@ -182,7 +193,13 @@ def build_mcp() -> FastMCP:
             tags=tags,
             location=location,
         )
-        return txns_svc.update(txn_id, params).model_dump(mode="json")
+        out = txns_svc.update(txn_id, params).model_dump(mode="json")
+        out.update(_received(
+            occurred_at=occurred_at,
+            location=(location.model_dump(mode="json") if location is not None else None),
+            tags=tags, account=account, category=category,
+            counter_account=counter_account))
+        return out
 
     @mcp.tool()
     def void_transaction(txn_id: str) -> dict:
