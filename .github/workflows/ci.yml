@@ -1,0 +1,72 @@
+# ledger CI — PR 校验流水线
+#
+# 设计口径（技术负责人，2026-11-08）：
+# - backend：uv 管理依赖（uv.lock 已入库），pytest 跑 tests/ 全量。
+# - frontend：oxlint 静态检查 + tsc/vite 构建；产物落 ledger/ui/（该目录已被 .gitignore 排除，
+#   仅 .gitkeep 入库，vite 插件 closeBundle 会补回占位文件）。
+# - NO_PROXY 显式设置：tests/test_manager_mode.py 的 subprocess 实证用例会起本地 serve
+#   并回环轮询 /api/health；Python urllib 会读取宿主系统代理（macOS _scproxy），
+#   若不绕过，回环请求会被代理吞掉而超时。GHA runner 本身无代理，这里是显式加固。
+# - job 名即 GitHub check 名：ruleset required_status_checks 按 backend / frontend 勾选。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # 回环健康检查不受宿主/runner 级系统代理影响。
+  # 只写大写：GitHub workflow 校验按大小写不敏感比较 key，NO_PROXY/no_proxy 同时出现会报
+  # `'no_proxy' is already defined`；Python urllib 读取时会自行 lower，大写一份即可。
+  NO_PROXY: 127.0.0.1,localhost
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: Sync dependencies (frozen)
+        run: uv sync --frozen
+      - name: Run tests (pytest)
+        run: uv run pytest -q
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint (oxlint)
+        run: npm run lint
+      - name: Build (tsc + vite)
+        run: npm run build
